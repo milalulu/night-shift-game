@@ -17,7 +17,7 @@ var flashlight: SpotLight3D
 var interaction_ray: RayCast3D
 var body_shape: CollisionShape3D
 var current_target: Object
-var mouse_sensitivity := 0.00045
+var mouse_sensitivity := 0.00005
 var invert_x := false
 var pitch := 0.0
 var stamina := 1.0
@@ -62,7 +62,7 @@ func _add_key_action(action: String, key: int) -> void:
 func _load_settings() -> void:
 	var config := ConfigFile.new()
 	if config.load(MOUSE_SETTING_PATH) == OK:
-		mouse_sensitivity = clampf(float(config.get_value("controls", "sensitivity", mouse_sensitivity)), 0.00005, 0.0025)
+		mouse_sensitivity = clampf(float(config.get_value("controls", "sensitivity", 0.00025)), 0.00005, 0.0025)
 		invert_x = bool(config.get_value("controls", "invert_x", false))
 
 func save_settings() -> void:
@@ -72,7 +72,7 @@ func save_settings() -> void:
 	config.save(MOUSE_SETTING_PATH)
 
 func set_mouse_sensitivity(value: float) -> void:
-	mouse_sensitivity = clampf(value, 0.00005, 0.0025)
+	mouse_sensitivity = clampf(value, 0.00005, 0.0025) * 0.1
 	save_settings()
 
 func set_invert_x(value: bool) -> void:
@@ -144,9 +144,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if controls_enabled and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not hidden:
 		# Collect relative mouse deltas and apply a bounded turn rate, avoiding pointer-lock spikes.
-		var yaw_delta := clampf(pending_mouse.x * mouse_sensitivity, -delta * 1.4, delta * 1.4)
-		var pitch_delta := clampf(pending_mouse.y * mouse_sensitivity * 0.30, -delta * 0.42, delta * 0.42)
-		var yaw_sign := 1.0 if invert_x else -1.0
+		var yaw_delta := clampf(pending_mouse.x * mouse_sensitivity, -delta * 0.35, delta * 0.35)
+		var pitch_delta := clampf(pending_mouse.y * mouse_sensitivity * 0.22, -delta * 0.18, delta * 0.18)
+		var yaw_sign := -1.0 if invert_x else 1.0
 		rotation.y += yaw_delta * yaw_sign
 		pitch = clampf(pitch - pitch_delta, -1.12, 1.12)
 		head.rotation.x = pitch
