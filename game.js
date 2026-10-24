@@ -506,9 +506,9 @@ function begin(){
 function pause(){
   if(!world.active||world.ended||journalOpen||choiceOpen)return;
   world.paused=true;world.active=false;
-  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> СМЕНА ПРИОСТАНОВЛЕНА</div><h1 style="font-size:clamp(64px,10vw,110px)">ТИШЕ.</h1><p class="story">Станция никуда не денется. Надеюсь.</p><div class="settings-panel"><label>ЧУВСТВИТЕЛЬНОСТЬ МЫШИ <input id="sensitivity-setting" type="range" min="0.0007" max="0.004" step="0.0001" value="0.0021"></label><label>ГРОМКОСТЬ <input id="volume-setting" type="range" min="0" max="1" step="0.05" value="0.65"></label><label>РАЗМЕР СУБТИТРОВ <input id="subtitle-setting" type="range" min="10" max="20" step="1" value="12"></label></div><button id="resume-button" class="start-button"><span>ВЕРНУТЬСЯ</span><b>↗</b></button><div class="menu-footer"><span>ESC — продолжить</span><span>J — журнал</span></div></div>`;
+  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> СМЕНА ПРИОСТАНОВЛЕНА</div><h1 style="font-size:clamp(64px,10vw,110px)">ТИШЕ.</h1><p class="story">Станция никуда не денется. Надеюсь.</p><div class="settings-panel"><label>ЧУВСТВИТЕЛЬНОСТЬ МЫШИ <input id="sensitivity-setting" type="range" min="0.00005" max="0.0025" step="0.00005" value="0.00045"></label><label>ГРОМКОСТЬ <input id="volume-setting" type="range" min="0" max="1" step="0.05" value="0.65"></label><label>РАЗМЕР СУБТИТРОВ <input id="subtitle-setting" type="range" min="10" max="20" step="1" value="12"></label></div><button id="resume-button" class="start-button"><span>ВЕРНУТЬСЯ</span><b>↗</b></button><div class="menu-footer"><span>ESC — продолжить</span><span>J — журнал</span></div></div>`;
   $('overlay').classList.remove('hidden');document.exitPointerLock?.();
-  const sensitivity=$('sensitivity-setting'),volume=$('volume-setting'),subtitleSize=$('subtitle-setting');sensitivity.value=localStorage.getItem('shift13-sensitivity')||'0.0021';volume.value=localStorage.getItem('shift13-volume')||'.65';subtitleSize.value=localStorage.getItem('shift13-subtitle-size')||'12';
+  const sensitivity=$('sensitivity-setting'),volume=$('volume-setting'),subtitleSize=$('subtitle-setting');sensitivity.value=localStorage.getItem('shift13-sensitivity')||'0.00045';volume.value=localStorage.getItem('shift13-volume')||'.65';subtitleSize.value=localStorage.getItem('shift13-subtitle-size')||'12';
   sensitivity.addEventListener('input',()=>localStorage.setItem('shift13-sensitivity',sensitivity.value));
   volume.addEventListener('input',()=>{localStorage.setItem('shift13-volume',volume.value);if(window.masterGain)window.masterGain.gain.value=Number(volume.value);});
   subtitleSize.addEventListener('input',()=>{localStorage.setItem('shift13-subtitle-size',subtitleSize.value);$('subtitle').style.fontSize=`${subtitleSize.value}px`;});
@@ -601,8 +601,21 @@ $('new-game-button').addEventListener('click',resetAllSaves);
 $('episode1-menu-button').addEventListener('click',replayEpisode1);
 $('episode2-menu-button').addEventListener('click',selectEpisode2);
 $('journal-close').addEventListener('click',closeJournal);
-document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==renderer.domElement&&world.active&&!world.ended)pause();});
-document.addEventListener('mousemove',(e)=>{if(!world.active||document.pointerLockElement!==renderer.domElement)return;const sensitivity=Number(localStorage.getItem('shift13-sensitivity')||'0.0021');world.yaw-=e.movementX*sensitivity;world.pitch-=e.movementY*sensitivity*.86;world.pitch=THREE.MathUtils.clamp(world.pitch,-1.3,1.3);});
+let ignoreNextMouseMove=false;
+document.addEventListener('pointerlockchange',()=>{
+  if(document.pointerLockElement===renderer.domElement)ignoreNextMouseMove=true;
+  else if(world.active&&!world.ended)pause();
+});
+document.addEventListener('mousemove',(e)=>{
+  if(!world.active||document.pointerLockElement!==renderer.domElement)return;
+  if(ignoreNextMouseMove){ignoreNextMouseMove=false;return;}
+  const stored=Number(localStorage.getItem('shift13-sensitivity')||'0.00045');
+  const sensitivity=THREE.MathUtils.clamp(Number.isFinite(stored)?stored:.00045,.00005,.0025);
+  const dx=THREE.MathUtils.clamp(e.movementX,-300,300),dy=THREE.MathUtils.clamp(e.movementY,-300,300);
+  world.yaw-=THREE.MathUtils.clamp(dx*sensitivity,-.22,.22);
+  world.pitch-=THREE.MathUtils.clamp(dy*sensitivity*.32,-.045,.045);
+  world.pitch=THREE.MathUtils.clamp(world.pitch,-1.22,1.22);
+});
 document.addEventListener('keydown',(e)=>{
   if(e.code==='KeyJ'){if(journalOpen)closeJournal();else openJournal();return;}
   if(e.code==='Escape'){if(letterOpen){letterOpen=false;$('letter').classList.add('hidden');}else if(world.active)pause();else if(world.paused)resume();return;}
