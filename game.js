@@ -34,6 +34,7 @@ const mats = {
 const colliders = [];
 const interactables = [];
 const clock = new THREE.Clock();
+const tweens=[];
 const world = {
   active: false, paused: false, ended: false, fuses: 0, generator: false,
   monsterAwake: false, monsterCaught: false, monsterState: 'dormant',
@@ -59,6 +60,21 @@ function wallX(x, z1, z2, material = mats.wall) { box('wall', x, 1.65, (z1 + z2)
 function wallZ(z, x1, x2, material = mats.wall) { box('wall', (x1 + x2) / 2, 1.65, z, x2 - x1, 3.3, .42, material, { collider: true }); }
 function pointLight(x, y, z, color, intensity, distance, decay = 2) {
   const light = new THREE.PointLight(color, intensity, distance, decay); light.position.set(x,y,z); scene.add(light); return light;
+}
+function tweenProperty(target,property,to,duration=1,ease='smooth',complete){
+  tweens.push({target,property,from:target[property],to,duration,start:clock.elapsedTime,ease,complete});
+}
+function updateTweens(){
+  for(let i=tweens.length-1;i>=0;i--){
+    const item=tweens[i],raw=THREE.MathUtils.clamp((clock.elapsedTime-item.start)/item.duration,0,1);
+    const t=item.ease==='out'?1-(1-raw)**3:item.ease==='in'?raw**3:raw*raw*(3-2*raw);
+    item.target[item.property]=THREE.MathUtils.lerp(item.from,item.to,t);
+    if(raw>=1){tweens.splice(i,1);item.complete?.();}
+  }
+}
+function stinger(color='#c88763',strength=.72){
+  const layer=$('screen-flash');layer.style.backgroundColor=color;layer.style.opacity=String(strength);world.cameraShake=Math.max(world.cameraShake||0,.34);
+  requestAnimationFrame(()=>{layer.style.opacity='0';});
 }
 function fixture(x, z, color = 0xc3b995, strength = .85) {
   box('lamp housing', x, 3.1, z, .85, .12, .32, mats.darkMetal);
@@ -132,6 +148,7 @@ sign('ВЫХОД  /  EXIT',0,2.37,19.77,2.25);
 // Details: flickering lights, wiring, stained paint, lockers, desk clutter.
 fixture(0,-17,0xc7b78e,.55);fixture(0,-8,0x9aafad,.72);fixture(0,0,0xc8b991,.58);fixture(0,8,0x9b4030,.4);fixture(0,16,0xc3b995,.62);
 fixture(-10,-8,0xc6b58c,.43);fixture(10,-8,0x9eafb0,.48);fixture(-10,8,0x9c4935,.38);fixture(10,8,0xc7b68c,.42);
+const alarmGlow=pointLight(0,2.35,8,0xad3527,0,12,2.2);
 sign('РЕЛЕЙНЫЙ ЗАЛ',0,2.66,-6.2,2.8);sign('АРХИВ',10,2.55,-12.76,1.45);sign('МАСТЕРСКАЯ',-10,2.55,12.76,2.1);sign('ЩИТОВАЯ',0,2.65,-25.78,1.7);
 sign('КАБЕЛЬНЫЙ ТОННЕЛЬ',0,2.55,-34.5,3.1);sign('ЛИНИЯ 4',0,2.48,-44,1.7);sign('АРХИВ ЛЕНТ',-13,2.55,-43.76,2.15);sign('КОММУТАТОР',12,2.55,-43.76,2.1);
 // Pipe runs.
@@ -157,9 +174,12 @@ for(let i=0;i<7;i++){
 }
 // Generator and its panel.
 box('generator base',0,.28,-25,3.5,.55,2.4,mats.darkMetal,{collider:true});
-box('generator body',0,1.35,-25,3.1,1.65,2,mats.metal,{collider:true});
+const generatorBody=box('generator body',0,1.35,-25,3.1,1.65,2,mats.metal,{collider:true});
 for(const x of [-1,0,1]){const vent=box('generator vent',x,1.42,-23.97,.09,.82,.035,mats.black);vent.rotation.z=.12;}
 box('generator cap',0,2.24,-25,3.3,.16,2.15,mats.rust);
+const generatorRotor=new THREE.Group();generatorRotor.position.set(1.03,1.38,-23.91);scene.add(generatorRotor);
+const rotorHub=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.12,10),mats.rust);rotorHub.rotation.x=Math.PI/2;generatorRotor.add(rotorHub);
+for(let i=0;i<4;i++){const blade=new THREE.Mesh(new THREE.BoxGeometry(.1,.46,.055),mats.metal);blade.position.y=.25;blade.rotation.z=i*Math.PI/2;generatorRotor.add(blade);}
 for(const x of [-1.25,1.25]){const gauge=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.09,16),new THREE.MeshBasicMaterial({color:0xa03f2b}));gauge.rotation.x=Math.PI/2;gauge.position.set(x,1.8,-23.93);scene.add(gauge);}
 const generatorPrompt=box('generator panel',0,1.28,-23.88,.75,.62,.12,mats.darkMetal);
 const generatorLamp=new THREE.Mesh(new THREE.SphereGeometry(.09,10,8),new THREE.MeshStandardMaterial({color:0x872f22,emissive:0x30100a,roughness:.4}));generatorLamp.position.set(0,1.35,-23.78);scene.add(generatorLamp);
@@ -242,17 +262,62 @@ const monster=new THREE.Group();scene.add(monster);
 const monsterMat=new THREE.MeshStandardMaterial({color:0x090d0e,roughness:1,emissive:0x090d0e});
 const silhouette=new THREE.Mesh(new THREE.CapsuleGeometry(.38,.95,4,6),monsterMat);silhouette.position.y=1.22;monster.add(silhouette);
 const head=new THREE.Mesh(new THREE.SphereGeometry(.29,7,6),monsterMat);head.position.y=2.12;monster.add(head);
-for(const x of [-.13,.13]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.035,6,6),new THREE.MeshBasicMaterial({color:0xb85137}));eye.position.set(x,2.15,.25);monster.add(eye);}
+const monsterArms=[],monsterLegs=[];
+for(const side of [-1,1]){
+  const arm=new THREE.Group();arm.position.set(side*.34,1.76,0);monster.add(arm);const upper=new THREE.Mesh(new THREE.CapsuleGeometry(.12,.83,3,5),monsterMat);upper.position.y=-.42;arm.add(upper);const hand=new THREE.Mesh(new THREE.SphereGeometry(.15,6,5),monsterMat);hand.position.set(side*.02,-.91,.06);arm.add(hand);monsterArms.push(arm);
+  const leg=new THREE.Group();leg.position.set(side*.19,.72,0);monster.add(leg);const lower=new THREE.Mesh(new THREE.CapsuleGeometry(.16,.63,3,5),monsterMat);lower.position.y=-.35;leg.add(lower);monsterLegs.push(leg);
+}
+const monsterEyes=[];
+for(const x of [-.13,.13]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.035,6,6),new THREE.MeshBasicMaterial({color:0xb85137}));eye.position.set(x,2.15,.25);monster.add(eye);monsterEyes.push(eye);}
+const monsterMouth=new THREE.Mesh(new THREE.BoxGeometry(.17,.035,.04),mats.black);monsterMouth.position.set(0,1.98,.27);monster.add(monsterMouth);
 monster.position.set(0,0,-17);monster.visible=false;
 
 function audioStart(){
   if(window.audioContext)return;
   const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;
-  const ctx=new Ctx(),master=ctx.createGain();master.gain.value=Number(localStorage.getItem('shift13-volume')||'.65');master.connect(ctx.destination);window.audioContext=ctx;window.masterGain=master;
+  const ctx=new Ctx(),master=ctx.createGain();master.gain.value=Number(localStorage.getItem('shift13-volume')||'.65');master.connect(ctx.destination);window.audioContext=ctx;window.masterGain=master;ctx.resume().catch(()=>{});
   const osc=ctx.createOscillator(),gain=ctx.createGain(),filter=ctx.createBiquadFilter();
   osc.type='sawtooth';osc.frequency.value=49;filter.type='lowpass';filter.frequency.value=115;gain.gain.value=.018;
   osc.connect(filter).connect(gain).connect(master);osc.start();
   const osc2=ctx.createOscillator(),g2=ctx.createGain();osc2.type='sine';osc2.frequency.value=52.3;g2.gain.value=.009;osc2.connect(g2).connect(master);osc2.start();
+  window.ambienceOsc=osc;window.ambienceGain=gain;
+  const windBuffer=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),windData=windBuffer.getChannelData(0);let wind=0;
+  for(let i=0;i<windData.length;i++){wind=wind*.985+(Math.random()*2-1)*.08;windData[i]=wind;}
+  const windSource=ctx.createBufferSource(),windFilter=ctx.createBiquadFilter(),windGain=ctx.createGain();windSource.buffer=windBuffer;windSource.loop=true;windFilter.type='lowpass';windFilter.frequency.value=320;windGain.gain.value=.055;windSource.connect(windFilter).connect(windGain).connect(master);windSource.start();window.windGain=windGain;
+  const heart=ctx.createOscillator(),heartGain=ctx.createGain();heart.type='sine';heart.frequency.value=48;heartGain.gain.value=0;heart.connect(heartGain).connect(master);heart.start();window.heartGain=heartGain;
+  const voice=$('radio-voice'),voiceHigh=ctx.createBiquadFilter(),voiceLow=ctx.createBiquadFilter(),voiceGain=ctx.createGain(),voicePan=ctx.createStereoPanner();
+  voiceHigh.type='highpass';voiceHigh.frequency.value=260;voiceLow.type='lowpass';voiceLow.frequency.value=3100;voiceGain.gain.value=.92;voicePan.pan.value=0;
+  const voiceSource=ctx.createMediaElementSource(voice);voiceSource.connect(voiceHigh).connect(voiceLow).connect(voiceGain).connect(voicePan).connect(master);window.radioVoice=voice;window.radioVoiceGain=voiceGain;
+}
+function radioLine(file,caption,duration=5200){
+  if(caption)subtitle(caption,duration);
+  const voice=window.radioVoice||$('radio-voice');if(!voice)return Promise.resolve();
+  if(window.radioLineFinish)window.radioLineFinish(false);voice.pause();voice.currentTime=0;
+  return new Promise((resolve)=>{
+    let finished=false;const finish=(played=true)=>{if(finished)return;finished=true;if(window.radioLineFinish===finish)window.radioLineFinish=null;resolve(played);};window.radioLineFinish=finish;
+    voice.addEventListener('ended',()=>finish(true),{once:true});voice.addEventListener('error',()=>finish(false),{once:true});
+    if(caption)voice.addEventListener('loadedmetadata',()=>subtitle(caption,Math.max(duration,voice.duration*1000+450)),{once:true});
+    voice.src=new URL(`assets/voice/${file}.ogg`,document.baseURI).href;voice.load();
+    const play=voice.play();if(play&&typeof play.catch==='function')play.catch(()=>finish(false));
+  });
+}
+function doorMotor(){
+  const ctx=window.audioContext;if(!ctx)return;
+  const osc=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();osc.type='sawtooth';osc.frequency.setValueAtTime(115,ctx.currentTime);osc.frequency.exponentialRampToValueAtTime(43,ctx.currentTime+1.35);filter.type='lowpass';filter.frequency.value=460;gain.gain.setValueAtTime(.0001,ctx.currentTime);gain.gain.linearRampToValueAtTime(.075,ctx.currentTime+.12);gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+1.4);osc.connect(filter).connect(gain).connect(window.masterGain||ctx.destination);osc.start();osc.stop(ctx.currentTime+1.45);
+}
+function openDoor(door){
+  if(!door.visible)return;
+  const collider=colliders.findIndex(c=>Math.abs(c.x-door.position.x)<.01&&Math.abs(c.z-door.position.z)<.01&&c.hx<2);
+  if(collider>=0)colliders.splice(collider,1);
+  doorMotor();tweenProperty(door.position,'y',door.position.y+3.5,1.45,'smooth',()=>{door.visible=false;});
+}
+function ambientUpdate(){
+  if(!world.active||!window.audioContext)return;
+  const tunnel=player.z<-28,near=world.monsterAwake?distance(monster.position.x,monster.position.z):40;
+  if(window.ambienceOsc)window.ambienceOsc.frequency.setTargetAtTime(tunnel?43:51,window.audioContext.currentTime,.8);
+  if(window.ambienceGain)window.ambienceGain.gain.setTargetAtTime(tunnel?.027:.018,window.audioContext.currentTime,.7);
+  if(window.windGain)window.windGain.gain.setTargetAtTime(tunnel?.085:.045,window.audioContext.currentTime,1.2);
+  if(window.heartGain)window.heartGain.gain.setTargetAtTime(near<10?(10-near)*.0035:0,window.audioContext.currentTime,.25);
 }
 function playRadioNoise(duration=.55){
   const ctx=window.audioContext;if(!ctx)return;
@@ -332,7 +397,7 @@ function begin(){
   $('overlay').classList.add('hidden');$('hud').classList.remove('hidden');world.active=true;world.paused=false;audioStart();lockPointer();
   refreshObjective();
   if(hasSavedGame)subtitle('СМЕНА ПРОДОЛЖЕНА · ТВОИ ЗАПИСИ И ПРЕДМЕТЫ СОХРАНЕНЫ.',3300);
-  else{subtitle('СЛУЖЕБНЫЙ ЖУРНАЛ · 17 ОКТЯБРЯ 1998 · 03:17\n«Илья, если слышишь меня — не включай четвёртую линию».',5400);setTimeout(()=>{if(world.active)subtitle('Рация · Соколов: «Сначала подай питание. Архив — за шлюзом. Я встречу тебя у выхода».',4600);},6100);}
+  else{subtitle('СЛУЖЕБНЫЙ ЖУРНАЛ · 17 ОКТЯБРЯ 1998 · 03:17\n«Илья, если слышишь меня — не включай четвёртую линию».',5400);setTimeout(()=>{if(world.active)radioLine('sokolov-opening','Соколов по рации: «Сначала подай питание. Архив за шлюзом. Я встречу тебя у выхода».',5800);},6100);}
   saveCheckpoint();
   if(world.phase==='choice'&&world.signalTuned)setTimeout(()=>{if(world.active)showChoices();},500);
 }
@@ -376,8 +441,11 @@ function showChoices(){
 }
 function chooseEnding(ending){
   world.ending=ending;world.phase='escape';choiceOpen=false;$('choice-panel').classList.add('hidden');refreshObjective();
-  exitDoor.visible=false;const doorCollider=colliders.findIndex(c=>Math.abs(c.x)<.01&&Math.abs(c.z-20)<.01&&c.hx<2);if(doorCollider>=0)colliders.splice(doorCollider,1);
-  toast('ВЫХОД ОТКРЫТ · ВЕРНИСЬ К ЮЖНОЙ ДВЕРИ',3600);subtitle(ending==='erase'?'Соколов: «Ты сделал правильно. Теперь уходи».':'Соколов: «Они уже слышали эфир. Беги, Илья».',3800);world.active=true;lockPointer();
+  openDoor(exitDoor);
+  toast('ВЫХОД ОТКРЫТ · ВЕРНИСЬ К ЮЖНОЙ ДВЕРИ',3600);world.active=true;lockPointer();
+  if(ending==='truth')radioLine('lena-truth','Лена по линии: «Теперь можешь идти. Я помню дорогу».',5000);
+  else if(ending==='erase')radioLine('lena-erase','Лена по линии: «Хорошо. Теперь тишина. Я тебя люблю».',4800);
+  else radioLine('sokolov-broadcast','Соколов: «Передача пошла. Илья, выходи. Оно услышало нас обоих».',5200);
   world.monsterAwake=true;world.monsterCaught=true;world.monsterState='hunt';
   saveCheckpoint();
 }
@@ -423,8 +491,8 @@ function interact(){
   if(target.type==='fuse'){
     target.object.visible=false;world.fuses++;beep(760,.17,.04);toast(`ПРЕДОХРАНИТЕЛЬ ДОБАВЛЕН · ${world.fuses}/3`);
     world.fuseIds.add(target.index);
-    if(world.fuses===1){world.monsterAwake=true;world.monsterState='watching';monster.visible=true;monster.position.set(0,0,-16.7);subtitle('Рация · Соколов: «Я видел свет в конце коридора. Здесь никого нет. Ты слышал?»',4200);$('radio-text').textContent='РАЦИЯ · ВХОДЯЩИЙ СИГНАЛ';}
-    if(world.fuses===2){subtitle('Лампы гаснут одна за другой. Что-то отвечает из закрытой линии.',3600);playRadioNoise(.8);}
+    if(world.fuses===1){world.monsterAwake=true;world.monsterState='watching';monster.visible=true;monster.position.set(0,0,-16.7);stinger('#b5573b',.46);radioLine('sokolov-warning','Рация · Соколов: «Илья? Ты тоже видел свет? Не смотри в конец коридора».',4800);$('radio-text').textContent='РАЦИЯ · ВХОДЯЩИЙ СИГНАЛ';}
+    if(world.fuses===2){stinger('#a33f31',.24);tweenProperty(alarmGlow,'intensity',3.5,.18);setTimeout(()=>tweenProperty(alarmGlow,'intensity',0,.8),3200);radioLine('lena-signal','Чужой голос из динамика: «Ты так долго меня искал. Не уходи опять».',4600);playRadioNoise(.8);}
     if(world.fuses===3){world.phase='generator';subtitle('Щитовая в северном конце. Проверь журнал перед запуском.',4200);$('radio-text').textContent='РАЦИЯ · СЛАБЫЙ НЕСУЩИЙ СИГНАЛ';}
     refreshObjective();
   } else if(target.type==='record'){
@@ -438,24 +506,24 @@ function interact(){
     target.active=true;world.hidden=true;world.hiddenSpot=target;world.lastNoise=Math.max(0,world.lastNoise-.35);$('hide-overlay').classList.remove('hidden');subtitle('Ты затаил дыхание. Нажми E, чтобы выйти.',2600);
   } else if(target.type==='gate'){
     if(!world.generator){target.active=true;toast('ШЛЮЗ ОБЕСТОЧЕН · НУЖЕН РЕЗЕРВНЫЙ ГЕНЕРАТОР');return;}
-    target.object.visible=false;const i=colliders.findIndex(c=>Math.abs(c.x)<.01&&Math.abs(c.z+28)<.01&&c.hx>1);if(i>=0)colliders.splice(i,1);
-    world.phase='tape';refreshObjective();beep(180,.45,.05);setTimeout(()=>beep(280,.32,.04),250);playRadioNoise(.7);subtitle('За шлюзом Соколов говорит уже не по рации. Его голос идёт из тоннеля.',4500);
+    openDoor(serviceGate);
+    world.phase='tape';refreshObjective();beep(180,.45,.05);setTimeout(()=>beep(280,.32,.04),250);playRadioNoise(.7);radioLine('sokolov-gate','Голос Соколова из тоннеля: «Не открывай шлюз. Я уже внутри. Нет. Я ещё в диспетчерской».',5700);
   } else if(target.type==='tape'){
-    world.tape=true;target.object.visible=false;world.phase='dials';world.monsterAwake=true;world.monsterState='hunt';refreshObjective();
+    world.tape=true;target.object.visible=false;world.phase='dials';world.monsterAwake=true;world.monsterState='hunt';refreshObjective();stinger('#d8ddd1',.34);tweenProperty(ambient,'intensity',.12,.28);setTimeout(()=>tweenProperty(ambient,'intensity',.3,1.1),600);
     journalEntries.push({title:'Мастер-лента Л-4',text:'Запись начинается голосом Лены: «Илья, не ищи меня в комнате. Я — в линии». Потом Соколов: «Ты включил её. Теперь она знает, где ты». На коробке мастер-ленты процарапаны цифры: 3 — 7 — 2.'});updateJournal();
-    showDocument('МАСТЕР-ЛЕНТА Л-4','На записи голос твоей сестры звучит так, будто она стоит за спиной. «Илья, не ищи меня в комнате. Я — в линии».\n\nСоколов отвечает: «Ты включил её. Теперь она знает, где ты».\n\nНа коробке процарапано: 3 — 7 — 2. Коммутатор находится в соседнем помещении.');playRadioNoise(1.2);
+    showDocument('МАСТЕР-ЛЕНТА Л-4','На записи голос твоей сестры звучит так, будто она стоит за спиной. «Илья, не ищи меня в комнате. Я — в линии».\n\nСоколов отвечает: «Ты включил её. Теперь она знает, где ты».\n\nНа коробке процарапано: 3 — 7 — 2. Коммутатор находится в соседнем помещении.');radioLine('lena-tape','Лена на мастер-ленте: «Илья, не включай линию четыре. Я не в комнате. Я в проводе».',5700).then((played)=>{if(played)radioLine('sokolov-tape','Соколов на записи: «Я не говорил этого. Кто сейчас говорит моим голосом?»',4300);});playRadioNoise(1.2);
     subtitle('Из глубины тоннеля доносится быстрый металлический стук.',3200);
   } else if(target.type==='evidence'){
     world.evidence.add(target.id);target.object.visible=false;toast('ДОКАЗАТЕЛЬСТВО ДОБАВЛЕНО В ЖУРНАЛ');journalEntries.push({title:target.id==='backup-reel'?'Резервная лента':'Лист настройки передатчика',text:target.id==='backup-reel'?'На второй дорожке слышно, как Соколов спорит с самим собой. Два голоса произносят одну фразу с разницей ровно в семь минут.':'На листе рукой Соколова: «Если собраны три записи — не жги мастер-ленту. Отправь копию и отключи контур вручную».'});updateJournal();refreshObjective();
   } else if(target.type==='generator'){
     if(world.fuses<3){target.active=true;toast(`НЕ ХВАТАЕТ ПРЕДОХРАНИТЕЛЕЙ · ${world.fuses}/3`);return;}
-    world.generator=true;world.phase='gate';refreshObjective();generatorLamp.material.color.setHex(0x83ac83);generatorLamp.material.emissive=new THREE.Color(0x32683b);pointLight(0,1.4,-23.5,0x76a878,8,14);beep(180,.5,.06);setTimeout(()=>beep(360,.4,.04),280);toast('ГЕНЕРАТОР ЗАПУЩЕН · ОТКРЫТ СЕРВИСНЫЙ ШЛЮЗ',3500);
-    $('radio-text').textContent='РАЦИЯ · КАНАЛ 4';subtitle('Соколов: «Теперь иди в архив. Там лента. Илья... не слушай, если она заплачет».',4600);world.monsterState=world.monsterAwake?'stalking':'dormant';
+    world.generator=true;world.phase='gate';refreshObjective();generatorLamp.material.color.setHex(0x83ac83);generatorLamp.material.emissive=new THREE.Color(0x32683b);pointLight(0,1.4,-23.5,0x76a878,8,14);stinger('#d3c28e',.2);beep(180,.5,.06);setTimeout(()=>beep(360,.4,.04),280);toast('ГЕНЕРАТОР ЗАПУЩЕН · ОТКРЫТ СЕРВИСНЫЙ ШЛЮЗ',3500);
+    $('radio-text').textContent='РАЦИЯ · КАНАЛ 4';radioLine('sokolov-generator','Соколов: «Питание вернулось. Иди в нижний архив. И не отвечай на четвёртую линию».',5200);world.monsterState=world.monsterAwake?'stalking':'dormant';
   } else if(target.type==='dial'){
     if(!world.tape){target.active=true;toast('НУЖНА МАСТЕР-ЛЕНТА · ПОСМОТРИ АРХИВ');return;}
     target.active=true;const i=target.index;world.dials[i]=(world.dials[i]+1)%10;dialMeshes[i].rotation.z=world.dials[i]*Math.PI/5;beep(430+world.dials[i]*36,.07,.012);refreshObjective();
     if(world.dials.join('')==='372'){
-      world.signalTuned=true;world.phase='choice';signalLight.material.color.setHex(0x9ac08b);signalLight.material.emissive=new THREE.Color(0x386d40);refreshObjective();beep(720,.25,.04);setTimeout(()=>beep(930,.32,.035),240);subtitle('На всех линиях одновременно звучит один голос: «Илья, теперь решай».',4300);setTimeout(()=>{if(!world.ended)showChoices();},3600);
+      world.signalTuned=true;world.phase='choice';signalLight.material.color.setHex(0x9ac08b);signalLight.material.emissive=new THREE.Color(0x386d40);refreshObjective();beep(720,.25,.04);setTimeout(()=>beep(930,.32,.035),240);radioLine('lena-signal','На всех линиях голос Лены: «Илья, теперь решай».',4300).then(()=>{if(!world.ended)showChoices();});
     }
   } else if(target.type==='exit'){
     if(!world.ending){target.active=true;toast('НЕТ ПИТАНИЯ · СНАЧАЛА ПРОЙДИ В НИЖНИЙ АРХИВ');return;}
@@ -520,9 +588,15 @@ function updateMonster(dt){
   monsterMat.emissive.setHex(lit?0x29140e:0x090d0e);
   const speed=world.phase==='escape'?1.28:world.tape?.9:world.generator?.58:.34;
   const pathDistance=Math.hypot(dx,dz);
-  if(!lit&&pathDistance>.35){monster.position.x+=dx/pathDistance*speed*dt;monster.position.z+=dz/pathDistance*speed*dt;}
+  const walking=!lit&&pathDistance>.35;
+  if(walking){monster.position.x+=dx/pathDistance*speed*dt;monster.position.z+=dz/pathDistance*speed*dt;}
   monster.lookAt(investigating?world.noiseAt.x:player.x,1.2,investigating?world.noiseAt.z:player.z);
   monster.position.y=Math.sin(clock.elapsedTime*3)*.035;
+  const stride=walking?Math.sin(clock.elapsedTime*8)*.55:0;
+  monsterArms[0].rotation.x=stride;monsterArms[1].rotation.x=-stride;
+  monsterLegs[0].rotation.x=-stride*.75;monsterLegs[1].rotation.x=stride*.75;
+  head.rotation.z=Math.sin(clock.elapsedTime*1.8)*.09;head.rotation.x=Math.sin(clock.elapsedTime*2.3)*.05;
+  const eyeGlow=d<8?.06:.035;for(const eye of monsterEyes)eye.scale.setScalar(eyeGlow/.035);
   if(d<1.15&&(!world.hidden||world.lastNoise>.72)){endGame(null);}
   if(d<8&&Math.random()<dt*.055){playRadioNoise(.18);}
 }
@@ -534,11 +608,14 @@ function animate(){
   requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.045);
   movement(dt);
   if(world.active&&world.flashlight&&world.battery>0){world.battery=Math.max(0,world.battery-dt*.00165);if(world.battery===0){toast('ФОНАРЬ ПОГАС · БАТАРЕЯ РАЗРЯЖЕНА',3500);world.flashlight=false;}updateFlashlight();}
-  camera.position.set(player.x,(keys.ControlLeft||keys.ControlRight?1.1:player.y)+(world.moving?Math.sin(world.walked*8)*.025:0),player.z);
+  updateTweens();
+  if(world.generator){generatorRotor.rotation.z+=dt*8;generatorBody.position.y=1.35+Math.sin(clock.elapsedTime*14)*.012;}
+  const shake=world.cameraShake||0;if(shake>0)world.cameraShake=Math.max(0,shake-dt*.65);
+  camera.position.set(player.x+(Math.random()-.5)*shake*.035,(keys.ControlLeft||keys.ControlRight?1.1:player.y)+(world.moving?Math.sin(world.walked*8)*.025:0)+(Math.random()-.5)*shake*.025,player.z);
   camera.rotation.set(world.pitch,world.yaw,world.moving?Math.sin(world.walked*4)*.006:0,'YXZ');
   for(const item of interactables){if(item.type==='fuse'&&item.active){item.object.rotation.y+=dt*.35;item.object.position.y=.7+Math.sin(clock.elapsedTime*2+item.index)*.045;}}
   const target=currentTarget();if(target&&world.active&&!letterOpen){$('prompt-text').textContent=target.label;$('prompt').classList.remove('hidden');}else $('prompt').classList.add('hidden');
-  updateMonster(dt);flickerLights();renderer.render(scene,camera);
+  updateMonster(dt);if(world.audioTimer===undefined||world.audioTimer<=0){ambientUpdate();world.audioTimer=.3;}else world.audioTimer-=dt;flickerLights();renderer.render(scene,camera);
 }
 animate();
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));renderer.setSize(innerWidth,innerHeight);});

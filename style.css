@@ -7,6 +7,7 @@ body { background:#080b0d; }
 #game { position:relative; isolation:isolate; }
 #viewport { position:absolute;inset:0; }
 #viewport canvas { display:block;width:100%;height:100%; }
+#screen-flash {position:absolute;z-index:2;inset:0;background:#c88763;opacity:0;pointer-events:none;transition:opacity .16s ease-out;mix-blend-mode:screen;}
 .grain,.vignette,.scanlines { position:absolute;inset:0;pointer-events:none;z-index:2; }
 .grain { opacity:.105;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");mix-blend-mode:screen; }
 .vignette { background:radial-gradient(ellipse at center,transparent 33%,rgba(0,0,0,.3) 72%,rgba(0,0,0,.88) 140%); }

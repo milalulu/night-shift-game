@@ -29,6 +29,8 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html game.js style.css _site/
+          mkdir -p _site/assets/voice
+          cp assets/voice/*.ogg _site/assets/voice/
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
