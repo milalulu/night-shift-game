@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080b0d" />
+    <title>Смена 13 — Узел связи</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="game">
+      <div id="viewport"></div>
+      <div class="grain"></div>
+      <div class="vignette"></div>
+      <div class="scanlines"></div>
+
+      <section id="hud" class="hidden" aria-live="polite">
+        <div class="hud-top">
+          <div class="station-tag"><span class="status-dot"></span> УЗЕЛ СВЯЗИ №13 <span class="tag-divider">/</span> 03:17</div>
+          <div class="objective"><span class="objective-label">ЗАДАЧА</span><span id="objective-text">Найти предохранители <b id="fuse-count">0 / 3</b></span></div>
+        </div>
+        <div id="crosshair"><i></i><i></i></div>
+        <div id="prompt" class="prompt hidden"><kbd>E</kbd><span id="prompt-text">Взаимодействовать</span></div>
+        <div class="hud-bottom">
+          <div class="radio-readout"><span class="radio-icon">▥</span><span id="radio-text">РАЦИЯ · ШУМ</span></div>
+          <div class="controls-hint">WASD <span>движение</span><b>·</b> E <span>действие</span><b>·</b> F <span>фонарь</span><b>·</b> SHIFT <span>бег</span></div>
+        </div>
+        <div id="subtitle" class="subtitle hidden"></div>
+        <div id="flashlight-indicator"><span class="beam-icon">◉</span> ФОНАРЬ <span id="light-state">ВКЛ</span></div>
+        <div class="stamina-indicator"><span>ВЫНОСЛИВОСТЬ</span><i><b id="stamina-fill"></b></i></div>
+      </section>
+
+      <section id="overlay" class="overlay">
+        <div class="menu-card">
+          <div class="eyebrow"><span class="eyebrow-line"></span> ИНТЕРАКТИВНАЯ ИСТОРИЯ · 1998</div>
+          <h1>СМЕНА<br /><em>13</em></h1>
+          <div class="title-rule"><span></span><b>УЗЕЛ СВЯЗИ</b><span></span></div>
+          <p class="story">Последний автобус ушёл. В старом узле связи погас свет, а диспетчер перестал отвечать. До рассвета — несколько часов. Нужно запустить резервный генератор и выбраться.</p>
+          <button id="start-button" class="start-button"><span>НАЧАТЬ СМЕНУ</span><b>↗</b></button>
+          <div class="menu-footer"><span>WASD — ходить</span><span>МЫШЬ — смотреть</span><span>E — взаимодействовать</span></div>
+          <div class="build-stamp">ДЕЛО № 13—04 <span>·</span> СЕКТОР ВОСТОК</div>
+        </div>
+        <div class="menu-coordinates">55°45' С.Ш. &nbsp; 37°37' В.Д.<br />МОСКОВСКАЯ ОБЛАСТЬ</div>
+      </section>
+      <div id="toast" class="toast hidden"></div>
+      <div id="letter" class="letter hidden"></div>
+    </main>
+    <script type="module" src="game.js"></script>
+  </body>
+</html>
