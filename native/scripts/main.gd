@@ -872,9 +872,9 @@ func _pause_game() -> void:
 	sensitivity.min_value = .00005
 	sensitivity.max_value = .0025
 	sensitivity.step = .00005
-	sensitivity.value = player.mouse_sensitivity / .1
+	sensitivity.value = player.mouse_sensitivity
 	sensitivity.custom_minimum_size = Vector2(500,32)
-	sensitivity.value_changed.connect(func(value: float): player.set_mouse_sensitivity(value * .1))
+	sensitivity.value_changed.connect(func(value: float): player.set_mouse_sensitivity(value))
 	menu_content.add_child(_label("ЧУВСТВИТЕЛЬНОСТЬ МЫШИ",10,Color("#a9afa5")))
 	menu_content.add_child(sensitivity)
 	var invert := CheckBox.new()
@@ -1252,8 +1252,9 @@ func _load_checkpoint() -> void:
 			item.visible = false
 		if item.get_meta("kind","") in ["record","tape"] and evidence_ids.has(item_id):
 			item.visible = false
-	if generator_on:
-		generator_lamp.modulate = Color("#83ac83")
+	if generator_on and generator_lamp.material_override is StandardMaterial3D:
+		(generator_lamp.material_override as StandardMaterial3D).albedo_color = Color("#83ac83")
+		(generator_lamp.material_override as StandardMaterial3D).emission = Color("#32683b")
 	if service_gate_open:
 		service_door.position.y = 5.2
 		service_door_collision.disabled = true
