@@ -872,17 +872,17 @@ func _process(delta: float) -> void:
 		_update_creature_animation()
 
 func _input(event: InputEvent) -> void:
+	if game_paused:
+		return
 	if event.is_action_pressed("pause") and game_started:
 		if reading_document:
 			_close_document()
 		elif choice_active:
 			return
-		elif game_paused:
-			_resume_game()
 		else:
 			_pause_game()
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("journal") and game_started and not game_paused:
+	elif event.is_action_pressed("journal") and game_started and not reading_document and not choice_active:
 		_show_journal()
 		get_viewport().set_input_as_handled()
 
@@ -1162,6 +1162,15 @@ func _on_player_state(state_name: String, value: Variant) -> void:
 		_play_tone(54.0 if bool(value) else 72.0,.055,.025)
 	elif state_name == "stamina" and meters_label != null:
 		meters_label.text = "БАТАРЕЯ %d%%      ВЫНОСЛИВОСТЬ %d%%" % [int(player.battery*100.0),int(float(value)*100.0)]
+	elif state_name == "journal":
+		if game_started and not game_paused and not choice_active and not reading_document:
+			_show_journal()
+	elif state_name == "pause":
+		if game_started and not reading_document and not choice_active:
+			if game_paused:
+				_resume_game()
+			else:
+				_pause_game()
 
 func _show_subtitle(text: String, duration: float = 3.5) -> void:
 	subtitle_label.text = text

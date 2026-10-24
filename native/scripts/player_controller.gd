@@ -151,6 +151,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		head.rotation.x = 0.0
 		pending_mouse = Vector2.ZERO
 		state_changed.emit("message", "ВЗГЛЯД СБРОШЕН")
+	elif event.is_action_pressed("journal"):
+		state_changed.emit("journal", null)
+	elif event.is_action_pressed("pause"):
+		pass
 
 func _physics_process(delta: float) -> void:
 	if controls_enabled and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not hidden:
