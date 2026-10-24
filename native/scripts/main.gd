@@ -29,11 +29,22 @@ var fuse_ids: Dictionary = {}
 var dials := [0, 0, 0]
 var fuses_found := 0
 var phase := "fuses"
+var current_episode := 1
 var generator_on := false
 var service_gate_open := false
 var tape_found := false
 var signal_tuned := false
 var ending := ""
+var episode2_unlocked := false
+var previous_ending := ""
+var episode2_record_ids: Dictionary = {}
+var episode2_dials := [0,0,0]
+var episode2_power := false
+var episode2_gate_open := false
+var episode2_ending := ""
+var episode2_record_data: Dictionary = {}
+var episode2_evidence: Dictionary = {}
+var episode2_fuses_found := 0
 var elapsed_seconds := 0.0
 var monster: Node3D
 var monster_active := false
@@ -50,6 +61,14 @@ var generator_body: Node3D
 var generator_rotor: Node3D
 var generator_lamp: MeshInstance3D
 var signal_lamp: MeshInstance3D
+var radio_generator_body: Node3D
+var radio_generator_lamp: MeshInstance3D
+var radio_gate: StaticBody3D
+var radio_gate_collision: CollisionShape3D
+var radio_exit: StaticBody3D
+var radio_exit_collision: CollisionShape3D
+var radio_dials: Array[MeshInstance3D] = []
+var radio_signal_lamp: MeshInstance3D
 var emergency_light: OmniLight3D
 var dial_nodes: Array[MeshInstance3D] = []
 var interactables: Array[Area3D] = []
@@ -312,6 +331,102 @@ func _build_station() -> void:
 		_add_interactable("dial", str(index), "Настроить канал %d" % (index+1), Vector3(-.85+index*.85,1.18,-52.55), Color("#a07852"), "dial")
 	_create_exit()
 	_create_interactables()
+	_build_radio_center()
+
+func _build_radio_center() -> void:
+	# Episode II lives far enough from the first station to share one native scene safely.
+	_floor(100,0,8,40)
+	_floor(90,0,12,40)
+	_floor(110,0,12,40)
+	_floor(100,-26,16,12)
+	_floor(100,-40,16,16)
+	for x in [96.0,104.0]:
+		_wall_x(x,-20,-10.1,mats.wall_dark)
+		_wall_x(x,-5.9,5.9,mats.wall_dark)
+		_wall_x(x,10.1,20,mats.wall_dark)
+	for x in [84.0,116.0]:
+		_wall_x(x,-20,20,mats.wall_dark)
+	for z in [-13.0,-3.0,3.0,13.0]:
+		_wall_z(z,84,96,mats.wall_dark)
+		_wall_z(z,104,116,mats.wall_dark)
+	_wall_z(-20,84,96,mats.wall_dark)
+	_wall_z(-20,104,116,mats.wall_dark)
+	_wall_z(20,84,98.5,mats.wall_dark)
+	_wall_z(20,101.5,116,mats.wall_dark)
+	_wall_x(92,-32,-20,mats.wall_dark)
+	_wall_x(108,-32,-20,mats.wall_dark)
+	_wall_z(-32,92,98.7,mats.wall_dark)
+	_wall_z(-32,101.3,108,mats.wall_dark)
+	radio_gate = _solid_box("Radio center north gate",Vector3(100,1.58,-32),Vector3(2.45,3.05,.28),mats.dark_metal)
+	radio_gate_collision = radio_gate.get_node("Hitbox")
+	_wall_x(92,-48,-32,mats.wall_dark)
+	_wall_x(108,-48,-32,mats.wall_dark)
+	_wall_z(-48,92,108,mats.wall_dark)
+	for z in [-16.0,-8.0,0.0,8.0,16.0]:
+		_solid_box("Broadcast ceiling beam",Vector3(100,3.22,z),Vector3(8.7,.18,.22),mats.rust,false)
+		_lamp(100,z,Color("#b6ac91") if z != 0 else Color("#a33d31"),.85 if z != 0 else .4)
+	_lamp(90,-8,Color("#bcae89"),.7)
+	_lamp(110,-8,Color("#9aabb0"),.7)
+	_lamp(90,8,Color("#a34b36"),.55)
+	_lamp(110,8,Color("#b7ab8d"),.65)
+	_lamp(100,-26,Color("#a8a184"),.7)
+	_lamp(100,-40,Color("#a2aeb0"),.7)
+	_sign("РАЙОННЫЙ РАДИОЦЕНТР",100,2.55,17.7,30)
+	_sign("МОНТАЖНАЯ",90,2.45,-12.75,17)
+	_sign("АРХИВ ЭФИРА",110,2.45,-12.75,18)
+	_sign("ЭФИРНАЯ",90,2.45,12.75,16)
+	_sign("ЩИТОВАЯ",100,2.45,-29.5,16)
+	_sign("ПЕРЕДАТЧИК",100,2.45,-44,18)
+	_table(90,-8,2.2,1.15)
+	_table(110,-8,2.2,1.1)
+	_table(90,8,2.2,1.05)
+	_table(105,-26,1.8,.9)
+	_solid_box("E2 tape deck",Vector3(90,1.04,-8),Vector3(1.25,.35,.55),mats.dark_metal,false)
+	_solid_box("E2 archive recorder",Vector3(110,1.0,-8),Vector3(1.0,.3,.5),mats.dark_metal,false)
+	_solid_box("E2 microphone",Vector3(90,1.35,8),Vector3(.12,.72,.12),mats.metal,false)
+	var radio_frame := _solid_box("E2 generator base",Vector3(100,.28,-27),Vector3(3.7,.55,2.4),mats.dark_metal)
+	radio_generator_body = _solid_box("E2 backup generator",Vector3(100,1.35,-27),Vector3(3.2,1.65,2),mats.metal)
+	radio_generator_lamp = _make_glow(Vector3(100,1.42,-25.93),Color("#873b2d"),.55)
+	var e2_panel := _add_interactable("episode2_generator","backup-gen","Подать питание на передатчик",Vector3(100,1.35,-25.55),Color("#bf7952"),"panel")
+	radio_signal_lamp = _make_glow(Vector3(101.45,1.65,-45.05),Color("#903b2a"),.55)
+	_solid_box("E2 transmitter console",Vector3(100,1.12,-45.1),Vector3(3.7,.42,.8),mats.metal)
+	_solid_box("E2 transmitter display",Vector3(100,1.75,-45.2),Vector3(2.5,.76,.08),_material(Color("#293b35"),Color("#10251e")),false)
+	for index in range(3):
+		var dial := MeshInstance3D.new()
+		var cylinder := CylinderMesh.new()
+		cylinder.top_radius = .23
+		cylinder.bottom_radius = .23
+		cylinder.height = .12
+		dial.mesh = cylinder
+		dial.position = Vector3(99.15+index*.85,1.18,-44.61)
+		dial.material_override = mats.rust
+		add_child(dial)
+		radio_dials.append(dial)
+		_add_interactable("episode2_dial",str(index),"Настроить полосу %d" % (index+1),dial.position,Color("#a07852"),"dial")
+	radio_exit = _solid_box("E2 south exit",Vector3(100,1.55,20),Vector3(2.75,3,.28),mats.dark_metal)
+	radio_exit_collision = radio_exit.get_node("Hitbox")
+	_add_interactable("episode2_exit","e2-exit","Покинуть радиоцентр",Vector3(100,1.45,18.8),Color("#b84935"),"door")
+	var e2_exit_frame := _mesh_box("E2 exit frame",Vector3(100,2.9,20),Vector3(3.1,.25,.35),mats.rust)
+	add_child(e2_exit_frame)
+	var record_data := {
+		"e2-operator-log":{"title":"Катушка №1 · Голос","text":"24 октября, 02:10. Передатчик выключен, но в эфире идёт моя смена. Я слышу, как сама читаю этот журнал. Карточка частот лежит в архиве."},
+		"e2-frequency-card":{"title":"Катушка №2 · Частоты","text":"Маршрут резервного сигнала: нижняя полоса — 5, средняя — 1, верхняя — 9. Не подавай несущую, пока не найдёшь все три катушки."},
+		"e2-studio-transcript":{"title":"Катушка №3 · Задержка","text":"Голос в эфире повторяет слова дежурного с задержкой в семь минут. Сигнал не предсказывает. Он вспоминает."},
+		"e2-repair-note":{"title":"Ремонтная бирка","text":"Передатчик можно изолировать от городской сети через ручной байпас. Дополнительные улики нужны, чтобы сохранить копию эфира и замкнуть контур."},
+	}
+	episode2_record_data = record_data
+	for entry in [
+		["e2-operator-log",Vector3(90,1.15,-8)],
+		["e2-frequency-card",Vector3(110,1.15,-8)],
+		["e2-studio-transcript",Vector3(90,1.15,8)],
+	]:
+		var id: String = entry[0]
+		_add_interactable("episode2_record",id,"Прослушать: %s" % record_data[id].title,entry[1],Color("#c6b58f"),"reel")
+	_add_interactable("episode2_repair","e2-repair-note","Забрать ремонтную бирку",Vector3(104.7,1.15,-25.6),Color("#c6b58f"),"paper")
+	_add_interactable("episode2_gate","e2-gate","Открыть северный шлюз",Vector3(100,1.5,-31.1),Color("#bf7952"),"panel")
+	_add_interactable("episode2_hide","e2-hide-studio","Спрятаться за шкафом",Vector3(93.9,1.2,8),Color("#524238"),"hide")
+	_add_interactable("episode2_hide","e2-hide-archive","Спрятаться в архивном шкафу",Vector3(112.2,1.2,8),Color("#524238"),"hide")
+	_add_interactable("episode2_battery","e2-battery","Забрать элемент питания",Vector3(112,.95,7),Color("#a69a68"),"battery")
 
 func _table(x: float, z: float, width: float, depth: float) -> void:
 	_solid_box("Table top",Vector3(x,.82,z),Vector3(width,.12,depth),mats.wood,false)
@@ -766,6 +881,8 @@ func _show_title() -> void:
 	menu_content.add_child(_button("ПРОДОЛЖИТЬ СМЕНУ" if has_checkpoint else "НАЧАТЬ СМЕНУ",_start_game))
 	var controls := _label("WASD — ходить   ·   мышь — смотреть   ·   E — действие\nShift — бежать   ·   Ctrl — красться   ·   F — фонарь\nEsc — пауза   ·   R — сбросить взгляд",11,Color("#838a82"))
 	menu_content.add_child(controls)
+	if episode2_unlocked:
+		menu_content.add_child(_button("ЭПИЗОД II · БЕЛЫЙ ШУМ",_start_episode_two))
 	var stamp := _label("НАТИВНАЯ ВЕРСИЯ · GODOT 4 · LINUX / WINDOWS",10,Color("#68716c"))
 	menu_content.add_child(stamp)
 	menu_panel.visible = true
@@ -784,19 +901,101 @@ func _start_game() -> void:
 	player.capture_mouse()
 	if not ambience_player.playing:
 		ambience_player.play()
-	if phase == "fuses" and not has_checkpoint:
+	if current_episode == 1 and phase == "fuses" and not has_checkpoint:
 		_show_subtitle("СЛУЖЕБНЫЙ ЖУРНАЛ · 17 ОКТЯБРЯ 1998 · 03:17\n«Илья, если слышишь меня — не включай четвёртую линию».",5.5)
 		_play_radio("sokolov-opening")
+	elif current_episode == 2 and phase == "e2-records" and not has_checkpoint:
+		_show_subtitle("24 ОКТЯБРЯ 1998 · 03:17\nОксана: «Я слышу себя в эфире, но я молчу».",6.0)
+		_play_radio("oksana-opening")
 	_refresh_objective()
 	_save_game()
 	if phase == "choice":
 		_show_choices()
+	elif phase == "e2-choice":
+		_show_episode_two_choices()
+
+func _start_episode_two() -> void:
+	current_episode = 2
+	phase = "e2-records"
+	episode2_record_ids.clear()
+	episode2_evidence.clear()
+	episode2_fuses_found = 0
+	episode2_dials = [0,0,0]
+	episode2_power = false
+	episode2_gate_open = false
+	episode2_ending = ""
+	ending = ""
+	elapsed_seconds = 0.0
+	save_timer = 0.0
+	monster_active = false
+	monster.visible = false
+	monster_speed = .38
+	player.global_position = Vector3(100,0,15.6)
+	player.rotation.y = 0.0
+	player.pitch = 0.0
+	player.head.rotation.x = 0.0
+	player.hidden = false
+	player.battery = 1.0
+	player.flashlight_enabled = true
+	player.flashlight.visible = true
+	player.stamina = 1.0
+	radio_gate.position.y = 1.58
+	radio_gate_collision.disabled = false
+	radio_exit.position.y = 1.55
+	radio_exit_collision.disabled = false
+	for item in interactables:
+		if str(item.get_meta("kind","" )).begins_with("episode2_"):
+			item.visible = true
+			item.monitoring = true
+	if radio_generator_lamp.material_override is StandardMaterial3D:
+		(radio_generator_lamp.material_override as StandardMaterial3D).albedo_color = Color("#873b2d")
+		(radio_generator_lamp.material_override as StandardMaterial3D).emission = Color("#32130d")
+	if radio_signal_lamp.material_override is StandardMaterial3D:
+		(radio_signal_lamp.material_override as StandardMaterial3D).albedo_color = Color("#903b2a")
+		(radio_signal_lamp.material_override as StandardMaterial3D).emission = Color("#2a100b")
+	game_started = true
+	game_paused = false
+	reading_document = false
+	choice_active = false
+	hud.visible = true
+	menu.visible = false
+	player.controls_enabled = true
+	player.capture_mouse()
+	if not ambience_player.playing:
+		ambience_player.play()
+	_update_objective()
+	_update_station_clock()
+	_save_game()
+	var consequence := "Сеть уже слышала твою передачу." if previous_ending == "broadcast" else "В журнале пропал час после отключения узла." if previous_ending == "erase" else "Собранные улики привели тебя к этому передатчику."
+	_show_subtitle("24 ОКТЯБРЯ 1998 · 04:02\n"+consequence+" Оксана: «Не включай передатчик».",6.0)
+	_play_radio("oksana-opening")
 
 func _update_station_clock() -> void:
-	var total_minutes := 3 * 60 + 17 + int(elapsed_seconds * 3.0 / 60.0)
-	clock_label.text = "УЗЕЛ СВЯЗИ №13  /  %02d:%02d" % [int(total_minutes / 60) % 24,total_minutes % 60]
+	var total_minutes := (4*60+2 if current_episode==2 else 3*60+17) + int(elapsed_seconds * 3.0 / 60.0)
+	clock_label.text = ("РАДИОЦЕНТР  /  " if current_episode==2 else "УЗЕЛ СВЯЗИ №13  /  ") + "%02d:%02d" % [int(total_minutes / 60) % 24,total_minutes % 60]
 
 func _refresh_objective() -> void:
+	if current_episode == 2:
+		match phase:
+			"e2-records":
+				objective_label.text = "ЭПИЗОД II · БЕЛЫЙ ШУМ\nНайти три катушки эфира"
+				progress_label.text = "%d / 3" % episode2_fuses_found
+			"e2-generator":
+				objective_label.text = "ЭПИЗОД II · БЕЛЫЙ ШУМ\nПодать питание на передатчик"
+				progress_label.text = "ЗАПИСИ НАЙДЕНЫ"
+			"e2-gate":
+				objective_label.text = "ЭПИЗОД II · СЕВЕРНЫЙ ШЛЮЗ\nОткрыть шлюз"
+				progress_label.text = "РЕЗЕРВНОЕ ПИТАНИЕ"
+			"e2-tune":
+				objective_label.text = "ЭПИЗОД II · ПЕРЕДАТЧИК\nНастроить несущую"
+				progress_label.text = "%d · %d · %d" % [episode2_dials[0],episode2_dials[1],episode2_dials[2]]
+			"e2-choice":
+				objective_label.text = "ЭПИЗОД II · БЕЛЫЙ ШУМ\nРешить судьбу передачи"
+				progress_label.text = "%d УЛИК" % episode2_evidence.size()
+			_:
+				objective_label.text = "ЭПИЗОД II · ВЫХОД\nПокинуть радиоцентр"
+				progress_label.text = "СИГНАЛ ОТКЛЮЧЁН"
+		return
 	match phase:
 		"fuses":
 			objective_label.text = "ГЛАВА I · МЁРТВАЯ ЛИНИЯ\nНайти предохранители"
@@ -824,7 +1023,7 @@ func _refresh_objective() -> void:
 			progress_label.text = ""
 
 func _update_hud() -> void:
-	clock_label.text = "УЗЕЛ СВЯЗИ №13  /  %02d:%02d" % [int((3*60+17+int(elapsed_seconds*3.0/60.0))/60)%24,(3*60+17+int(elapsed_seconds*3.0/60.0))%60]
+	_update_station_clock()
 	meters_label.text = "БАТАРЕЯ %d%%      ВЫНОСЛИВОСТЬ %d%%" % [int(player.battery*100.0),int(player.stamina*100.0)]
 
 func _on_interaction_hint(text: String) -> void:
@@ -966,8 +1165,8 @@ func _on_interact(target: Object) -> void:
 			generator_on = true
 			phase = "gate"
 			if generator_lamp.material_override is StandardMaterial3D:
+				(generator_lamp.material_override as StandardMaterial3D).albedo_color = Color("#83ac83")
 				(generator_lamp.material_override as StandardMaterial3D).emission = Color("#32683b")
-			generator_lamp.modulate = Color("#83ac83")
 			monster_speed = .56
 			_play_tone(90,.45,.08)
 			_show_subtitle("СОКОЛОВ: «Питание вернулось. Иди в нижний архив». ",4.0)
@@ -1017,7 +1216,90 @@ func _on_interact(target: Object) -> void:
 			if ending.is_empty():
 				_show_message("СНАЧАЛА РЕШИ, ЧТО ДЕЛАТЬ С ЗАПИСЬЮ")
 				return
-			_finish_game("")
+			_finish_game(ending)
+		"episode2_record":
+			if episode2_record_ids.has(item_id):
+				return
+			episode2_record_ids[item_id] = true
+			target.visible = false
+			var record: Dictionary = episode2_record_data.get(item_id,{"title":"ЗАПИСЬ","text":"На катушке слышны только помехи."})
+			journal_entries.append(record)
+			if item_id in ["e2-operator-log","e2-frequency-card","e2-studio-transcript"]:
+				episode2_fuses_found += 1
+			if not monster_active:
+				monster_active = true
+				monster.visible = true
+				monster.position = Vector3(100,0,-17)
+				monster_speed = .38
+				camera_shake = .3
+				_play_radio("sokolov-ep2")
+			if episode2_fuses_found >= 3:
+				phase = "e2-generator"
+				_show_subtitle("Три катушки найдены. Щитовая — в северном конце.",3.5)
+			_refresh_objective()
+			_show_document(str(record.title),str(record.text))
+			_save_game()
+		"episode2_repair":
+			episode2_evidence["e2-repair-note"] = true
+			target.visible = false
+			journal_entries.append(episode2_record_data["e2-repair-note"])
+			_show_message("РЕМОНТНАЯ БИРКА · РУЧНОЙ БАЙПАС")
+			_save_game()
+		"episode2_battery":
+			player.battery = minf(1.0,player.battery+.42)
+			target.visible = false
+			_show_message("ЭЛЕМЕНТ ПИТАНИЯ · %d%%" % int(player.battery*100))
+			_save_game()
+		"episode2_hide":
+			hiding = true
+			player.set_hidden(true)
+			_show_subtitle("Ты затаил дыхание. Нажми E, чтобы выйти.",2.5)
+		"episode2_generator":
+			if episode2_fuses_found < 3:
+				_show_message("НЕ ХВАТАЕТ КАТУШЕК · %d/3" % episode2_fuses_found)
+				return
+			episode2_power = true
+			phase = "e2-gate"
+			if radio_generator_lamp.material_override is StandardMaterial3D:
+				(radio_generator_lamp.material_override as StandardMaterial3D).albedo_color = Color("#83ac83")
+				(radio_generator_lamp.material_override as StandardMaterial3D).emission = Color("#32683b")
+			monster_speed = .62
+			_play_tone(92,.5,.08)
+			_play_radio("sokolov-generator")
+			_refresh_objective()
+			_save_game()
+		"episode2_gate":
+			if not episode2_power:
+				_show_message("ШЛЮЗ ОБЕСТОЧЕН · ЗАПУСТИ ГЕНЕРАТОР")
+				return
+			_open_door(radio_gate,radio_gate_collision)
+			episode2_gate_open = true
+			phase = "e2-tune"
+			_play_radio("oksana-log")
+			_show_subtitle("Карточка частот: нижняя полоса — 5, средняя — 1, верхняя — 9.",4.5)
+			_refresh_objective()
+			_save_game()
+		"episode2_dial":
+			if not episode2_gate_open:
+				_show_message("СНАЧАЛА ОТКРОЙ СЕВЕРНЫЙ ШЛЮЗ")
+				return
+			var dial_index := int(item_id)
+			episode2_dials[dial_index] = (episode2_dials[dial_index]+1)%10
+			radio_dials[dial_index].rotation.z = float(episode2_dials[dial_index])*PI/5.0
+			_play_tone(430.0+float(episode2_dials[dial_index])*32.0,.08,.02)
+			_refresh_objective()
+			_save_game()
+			if episode2_dials == [5,1,9]:
+				phase = "e2-choice"
+				if radio_signal_lamp.material_override is StandardMaterial3D:
+					(radio_signal_lamp.material_override as StandardMaterial3D).albedo_color = Color("#9ac08b")
+					(radio_signal_lamp.material_override as StandardMaterial3D).emission = Color("#386d40")
+				_show_episode_two_choices()
+		"episode2_exit":
+			if episode2_ending.is_empty():
+				_show_message("СИГНАЛ ЕЩЁ ИДЁТ · РЕШИ, ЧТО ДЕЛАТЬ С ПЕРЕДАЧЕЙ")
+				return
+			_finish_game(episode2_ending)
 		_:
 			_show_message("ЗДЕСЬ ПОКА НИЧЕГО НЕТ")
 
@@ -1109,7 +1391,22 @@ func _update_creature(delta: float) -> void:
 	if moving:
 		direction = direction.normalized()
 		var target: Vector3 = target_position
-		if absf(player.global_position.x) > 4.2:
+		if current_episode == 2:
+			if target_position.z < -32.0 and monster.position.z > -31.0:
+				target = Vector3(100,0,-33.2)
+			elif target_position.z > -32.0 and monster.position.z < -33.0:
+				target = Vector3(100,0,-30.8)
+			elif target_position.z < -20.0 and monster.position.z > -19.0:
+				target = Vector3(100,0,-21.2)
+			elif target_position.z > -20.0 and monster.position.z < -21.0:
+				target = Vector3(100,0,-18.8)
+			elif target_position.z > -20.0 and absf(target_position.x-100.0) > 4.0:
+				var door_x := 95.55 if target_position.x < 100.0 else 104.45
+				var doorway_z := -8.0 if target_position.z < -3.0 else 8.0
+				target = Vector3(100,0,doorway_z) if absf(monster.position.z-doorway_z) > 1.1 else Vector3(door_x,0,doorway_z)
+				if absf(monster.position.x-door_x) < .7 and absf(monster.position.z-doorway_z) < 1.1:
+					target = target_position
+		elif absf(player.global_position.x) > 4.2:
 			var doorway_z := -8.0 if player.global_position.z < 0.0 else 8.0
 			if absf(monster.position.z-doorway_z) > 1.0:
 				target = Vector3(0,0,doorway_z)
@@ -1172,7 +1469,41 @@ func _choose_ending(choice: String) -> void:
 	_show_message("ВЫХОД ОТКРЫТ · ВЕРНИСЬ К ЮЖНОЙ ДВЕРИ",3.5)
 	_save_game()
 
-func _finish_game(result: String) -> void:
+func _show_episode_two_choices() -> void:
+	choice_active = true
+	player.controls_enabled = false
+	player.release_mouse()
+	for child in choice_panel.get_children():
+		choice_panel.remove_child(child)
+		child.queue_free()
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation",14)
+	choice_panel.add_child(content)
+	var consequence := "После эфира узла №13 сигнал уже звучит на семнадцати частотах." if previous_ending == "broadcast" else "После уничтожения мастер-ленты районный журнал потерял целый час." if previous_ending == "erase" else "Твои улики привели к передатчику, но источник сигнала всё ещё не найден."
+	content.add_child(_label("ЭПИЗОД II · ПОСЛЕДНЕЕ РЕШЕНИЕ",11,Color("#c27a5a")))
+	content.add_child(_label("КТО ГОВОРИТ В ЭФИРЕ?",26,Color("#e5e0d1")))
+	content.add_child(_label(consequence+" Оксана просит предупредить город или оборвать несущую.",14,Color("#a9afa5")))
+	content.add_child(_button("ПРЕДУПРЕДИТЬ ГОРОД",func(): _choose_episode_two("e2-broadcast")))
+	content.add_child(_button("ЗАГЛУШИТЬ НЕСУЩУЮ",func(): _choose_episode_two("e2-jam")))
+	if episode2_evidence.has("e2-repair-note"):
+		content.add_child(_button("ЗАМКНУТЬ КОНТУР · СОХРАНИТЬ КОПИЮ",func(): _choose_episode_two("e2-isolate")))
+	choice_panel.visible = true
+
+func _choose_episode_two(choice: String) -> void:
+	episode2_ending = choice
+	phase = "e2-escape"
+	choice_active = false
+	choice_panel.visible = false
+	player.controls_enabled = true
+	player.capture_mouse()
+	_open_door(radio_exit,radio_exit_collision)
+	monster_active = true
+	monster_speed = 1.15
+	_refresh_objective()
+	_show_message("ВЫХОД ОТКРЫТ · ВЕРНИСЬ К ЮЖНОМУ ВХОДУ",3.5)
+	_save_game()
+
+func _finish_episode_two(result: String) -> void:
 	game_started = false
 	game_paused = false
 	player.controls_enabled = false
@@ -1182,6 +1513,32 @@ func _finish_game(result: String) -> void:
 	menu.visible = true
 	for child in menu_content.get_children():
 		child.queue_free()
+	var title := "СВЯЗЬ ПОТЕРЯНА" if result.is_empty() else "ОБЩИЙ ЭФИР" if result == "e2-broadcast" else "БЕЛЫЙ ШУМ" if result == "e2-jam" else "ЗАПЕРТЫЙ КОНТУР"
+	var story_text := "Ты не успел выбраться из радиоцентра. Утром передатчик продолжал работать, хотя питание было отключено." if result.is_empty() else "Ты предупредил город. На рассвете эфир стих, но в каждом радиоприёмнике остался голос, который знает имена слушателей." if result == "e2-broadcast" else "Ты перегрузил передатчик. Несущая исчезла, а вместе с ней — голос Оксаны. Соколов спросил, слышал ли ты своё имя после отключения." if result == "e2-jam" else "Ты сохранил копию записей и замкнул сигнал на пустой несущей. Город проснулся в тишине. На ленте осталось: «Северный узел всё ещё работает»."
+	menu_content.add_child(_label("РАЙОННЫЙ РАДИОЦЕНТР · %s" % clock_label.text.get_slice("/ ",1),11,Color("#c27a5a")))
+	menu_content.add_child(_label(title,50,Color("#e5e0d1")))
+	menu_content.add_child(_label(story_text,15,Color("#a9afa5")))
+	menu_content.add_child(_button("ПЕРЕИГРАТЬ С КОНТРОЛЬНОЙ ТОЧКИ",func(): get_tree().reload_current_scene()))
+	if not result.is_empty():
+		menu_content.add_child(_button("В ГЛАВНОЕ МЕНЮ",func(): _return_to_title()))
+		menu_content.add_child(_label("ЭПИЗОД III · «ГОЛОС» — ДАЛЬШЕ ПО ПЛАНУ",10,Color("#777f76")))
+
+func _finish_game(result: String) -> void:
+	if current_episode == 2:
+		_finish_episode_two(result)
+		return
+	game_started = false
+	game_paused = false
+	player.controls_enabled = false
+	player.release_mouse()
+	ambience_player.stop()
+	hud.visible = false
+	menu.visible = true
+	for child in menu_content.get_children():
+		child.queue_free()
+	if not result.is_empty() and current_episode == 1:
+		episode2_unlocked = true
+		previous_ending = result
 	var title := "СИГНАЛ ПОТЕРЯН" if result.is_empty() else "ЭФИР" if result == "broadcast" else "ТИШИНА" if result == "erase" else "ПАМЯТЬ"
 	var text := "Ты не успел выбраться. В журнале смены утром нашли только одну фразу: «Не отвечай, если услышишь своё имя»." if result.is_empty() else "Ты передал запись по аварийному каналу. На рассвете станция замолчала, но голос Лены появился на других частотах." if result == "broadcast" else "Ты сжёг ленту и перерезал линию. Впервые за семь лет в рации стало тихо." if result == "erase" else "Ты сохранил доказательства и замкнул сигнал. Голос Лены сказал: «Теперь можешь идти»."
 	menu_content.add_child(_label("ЗАПИСЬ СМЕНЫ · %s" % clock_label.text.get_slice("/ ",1),11,Color("#c27a5a")))
@@ -1191,7 +1548,10 @@ func _finish_game(result: String) -> void:
 	menu_content.add_child(_button("ПЕРЕИГРАТЬ С КОНТРОЛЬНОЙ ТОЧКИ",func(): get_tree().reload_current_scene()))
 	if not result.is_empty():
 		menu_content.add_child(_button("В ГЛАВНОЕ МЕНЮ",func(): _return_to_title()))
-		menu_content.add_child(_label("ЭПИЗОД II · «БЕЛЫЙ ШУМ» — СЛЕДУЮЩИЙ ЭТАП НАТИВНОГО ПОРТА",10,Color("#777f76")))
+		if current_episode == 1:
+			menu_content.add_child(_button("ПЕРЕЙТИ К ЭПИЗОДУ II · БЕЛЫЙ ШУМ",_start_episode_two))
+		else:
+			menu_content.add_child(_label("ЭПИЗОД III · «ГОЛОС» — СЛЕДУЮЩИЙ ЭТАП НАТИВНОГО ПОРТА",10,Color("#777f76")))
 		_save_game()
 
 func _open_door(door: StaticBody3D, collision: CollisionShape3D) -> void:
@@ -1203,6 +1563,7 @@ func _open_door(door: StaticBody3D, collision: CollisionShape3D) -> void:
 
 func _save_game() -> void:
 	var config := ConfigFile.new()
+	config.set_value("run","current_episode",current_episode)
 	config.set_value("run","phase",phase)
 	config.set_value("run","fuses",fuses_found)
 	config.set_value("run","fuse_ids",fuse_ids.keys())
@@ -1218,6 +1579,15 @@ func _save_game() -> void:
 	config.set_value("run","player_yaw",player.rotation.y)
 	config.set_value("run","elapsed_seconds",elapsed_seconds)
 	config.set_value("run","battery",player.battery)
+	config.set_value("run","episode2_unlocked",episode2_unlocked)
+	config.set_value("run","previous_ending",previous_ending)
+	config.set_value("episode2","record_ids",episode2_record_ids.keys())
+	config.set_value("episode2","evidence_ids",episode2_evidence.keys())
+	config.set_value("episode2","records_found",episode2_fuses_found)
+	config.set_value("episode2","dials",episode2_dials)
+	config.set_value("episode2","power",episode2_power)
+	config.set_value("episode2","gate_open",episode2_gate_open)
+	config.set_value("episode2","ending",episode2_ending)
 	config.save(SAVE_PATH)
 	has_checkpoint = true
 
@@ -1227,6 +1597,7 @@ func _load_checkpoint() -> void:
 		has_checkpoint = false
 		return
 	has_checkpoint = true
+	current_episode = int(config.get_value("run","current_episode",1))
 	phase = str(config.get_value("run","phase","fuses"))
 	fuses_found = int(config.get_value("run","fuses",0))
 	fuse_ids.clear()
@@ -1246,11 +1617,29 @@ func _load_checkpoint() -> void:
 	player.global_position = config.get_value("run","player_position",Vector3(0,0,15.6))
 	player.rotation.y = float(config.get_value("run","player_yaw",0.0))
 	player.battery = float(config.get_value("run","battery",1.0))
+	episode2_unlocked = bool(config.get_value("run","episode2_unlocked",false))
+	previous_ending = str(config.get_value("run","previous_ending",""))
+	episode2_record_ids.clear()
+	for value in config.get_value("episode2","record_ids",[]):
+		episode2_record_ids[str(value)] = true
+	episode2_evidence.clear()
+	for value in config.get_value("episode2","evidence_ids",[]):
+		episode2_evidence[str(value)] = true
+	episode2_fuses_found = int(config.get_value("episode2","records_found",0))
+	episode2_dials = config.get_value("episode2","dials",[0,0,0])
+	episode2_power = bool(config.get_value("episode2","power",false))
+	episode2_gate_open = bool(config.get_value("episode2","gate_open",false))
+	episode2_ending = str(config.get_value("episode2","ending",""))
 	for item in interactables:
 		var item_id := str(item.get_meta("item_id",""))
 		if item.get_meta("kind","") == "fuse" and fuse_ids.has(item_id):
 			item.visible = false
 		if item.get_meta("kind","") in ["record","tape"] and evidence_ids.has(item_id):
+			item.visible = false
+		var kind := str(item.get_meta("kind",""))
+		if kind == "episode2_record" and episode2_record_ids.has(item_id):
+			item.visible = false
+		if kind == "episode2_repair" and episode2_evidence.has(item_id):
 			item.visible = false
 	if generator_on and generator_lamp.material_override is StandardMaterial3D:
 		(generator_lamp.material_override as StandardMaterial3D).albedo_color = Color("#83ac83")
@@ -1261,8 +1650,19 @@ func _load_checkpoint() -> void:
 	if ending != "":
 		exit_door.position.y = 5.1
 		exit_door_collision.disabled = true
-	if phase != "fuses":
+	if episode2_power and radio_generator_lamp.material_override is StandardMaterial3D:
+		(radio_generator_lamp.material_override as StandardMaterial3D).albedo_color = Color("#83ac83")
+		(radio_generator_lamp.material_override as StandardMaterial3D).emission = Color("#32683b")
+	for index in range(3):
+		radio_dials[index].rotation.z = float(episode2_dials[index])*PI/5.0
+	if episode2_gate_open:
+		radio_gate.position.y = 5.2
+		radio_gate_collision.disabled = true
+	if episode2_ending != "":
+		radio_exit.position.y = 5.1
+		radio_exit_collision.disabled = true
+	if (current_episode == 1 and (phase != "fuses" or fuse_ids.size() > 0 or evidence_ids.has("shift-log"))) or (current_episode == 2 and episode2_fuses_found > 0):
 		monster_active = true
 		monster.visible = true
-		monster.position = Vector3(0,0,-17)
+		monster.position = Vector3(100,0,-17) if current_episode == 2 else Vector3(0,0,-17)
 	_refresh_objective()
