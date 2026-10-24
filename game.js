@@ -401,13 +401,13 @@ let letterOpen=false,choiceOpen=false,journalOpen=false;
 let hasSavedGame=false;
 const saveKeyFor=(episode)=>`shift13-save-ep${episode}`;
 function migrateMouseSettings(){
-  if(localStorage.getItem('shift13-input-version')==='2')return;
+  if(localStorage.getItem('shift13-input-version')==='3')return;
   const oldValue=Number(localStorage.getItem('shift13-sensitivity'));
   if(Number.isFinite(oldValue)&&oldValue>0){
     const safer=oldValue<=.0007001?.00005:oldValue*.2142857;
     localStorage.setItem('shift13-sensitivity',String(THREE.MathUtils.clamp(safer,.00005,.0025)));
   }
-  localStorage.setItem('shift13-input-version','2');
+  localStorage.setItem('shift13-input-version','3');
 }
 function saveCheckpoint(){
   if(world.ended)return;
@@ -515,7 +515,7 @@ function begin(){
 function pause(){
   if(!world.active||world.ended||journalOpen||choiceOpen)return;
   world.paused=true;world.active=false;
-  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> СМЕНА ПРИОСТАНОВЛЕНА</div><h1 style="font-size:clamp(64px,10vw,110px)">ТИШЕ.</h1><p class="story">Станция никуда не денется. Надеюсь.</p><div class="settings-panel"><label>ЧУВСТВИТЕЛЬНОСТЬ МЫШИ <input id="sensitivity-setting" type="range" min="0.00005" max="0.0025" step="0.00005" value="0.00045"></label><label class="setting-toggle">ОБРАТНАЯ ОСЬ X <input id="invert-x-setting" type="checkbox"></label><label>ГРОМКОСТЬ <input id="volume-setting" type="range" min="0" max="1" step="0.05" value="0.65"></label><label>РАЗМЕР СУБТИТРОВ <input id="subtitle-setting" type="range" min="10" max="20" step="1" value="12"></label></div><button id="resume-button" class="start-button"><span>ВЕРНУТЬСЯ</span><b>↗</b></button><div class="menu-footer"><span>ESC — продолжить</span><span>J — журнал</span></div></div>`;
+  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> СМЕНА ПРИОСТАНОВЛЕНА</div><h1 style="font-size:clamp(64px,10vw,110px)">ТИШЕ.</h1><p class="story">Станция никуда не денется. Надеюсь.</p><div class="settings-panel"><label>ЧУВСТВИТЕЛЬНОСТЬ МЫШИ <input id="sensitivity-setting" type="range" min="0.00005" max="0.0025" step="0.00005" value="0.00045"></label><label class="setting-toggle">ОБРАТНАЯ ОСЬ X <input id="invert-x-setting" type="checkbox"></label><label>ГРОМКОСТЬ <input id="volume-setting" type="range" min="0" max="1" step="0.05" value="0.65"></label><label>РАЗМЕР СУБТИТРОВ <input id="subtitle-setting" type="range" min="10" max="20" step="1" value="12"></label></div><button id="resume-button" class="start-button"><span>ВЕРНУТЬСЯ</span><b>↗</b></button><div class="menu-footer"><span>ESC — продолжить</span><span>J — журнал</span><span>R — сбросить взгляд</span></div></div>`;
   $('overlay').classList.remove('hidden');document.exitPointerLock?.();
   const sensitivity=$('sensitivity-setting'),volume=$('volume-setting'),subtitleSize=$('subtitle-setting'),invertX=$('invert-x-setting');sensitivity.value=localStorage.getItem('shift13-sensitivity')||'0.00045';volume.value=localStorage.getItem('shift13-volume')||'.65';subtitleSize.value=localStorage.getItem('shift13-subtitle-size')||'12';invertX.checked=localStorage.getItem('shift13-invert-x')==='1';
   sensitivity.addEventListener('input',()=>localStorage.setItem('shift13-sensitivity',sensitivity.value));
@@ -614,24 +614,22 @@ $('episode2-menu-button').addEventListener('click',selectEpisode2);
 $('journal-close').addEventListener('click',closeJournal);
 let ignoreNextMouseMove=false;
 document.addEventListener('pointerlockchange',()=>{
+  pendingMouseX=0;pendingMouseY=0;
   if(document.pointerLockElement===renderer.domElement)ignoreNextMouseMove=true;
   else if(world.active&&!world.ended)pause();
 });
+let pendingMouseX=0,pendingMouseY=0;
 document.addEventListener('mousemove',(e)=>{
   if(!world.active||document.pointerLockElement!==renderer.domElement)return;
   if(ignoreNextMouseMove){ignoreNextMouseMove=false;return;}
-  const stored=Number(localStorage.getItem('shift13-sensitivity')||'0.00045');
-  const sensitivity=THREE.MathUtils.clamp(Number.isFinite(stored)?stored:.00045,.00005,.0025);
-  const dx=THREE.MathUtils.clamp(e.movementX,-300,300),dy=THREE.MathUtils.clamp(e.movementY,-300,300);
-  const direction=localStorage.getItem('shift13-invert-x')==='1'?1:-1;
-  world.yaw+=direction*THREE.MathUtils.clamp(dx*sensitivity,-.22,.22);
-  world.pitch-=THREE.MathUtils.clamp(dy*sensitivity*.32,-.045,.045);
-  world.pitch=THREE.MathUtils.clamp(world.pitch,-1.22,1.22);
+  pendingMouseX=THREE.MathUtils.clamp(pendingMouseX+e.movementX,-2400,2400);
+  pendingMouseY=THREE.MathUtils.clamp(pendingMouseY+e.movementY,-2400,2400);
 });
 document.addEventListener('keydown',(e)=>{
   if(e.code==='KeyJ'){if(journalOpen)closeJournal();else openJournal();return;}
   if(e.code==='Escape'){if(letterOpen){letterOpen=false;$('letter').classList.add('hidden');}else if(world.active)pause();else if(world.paused)resume();return;}
   if(!world.active)return;
+  if(e.code==='KeyR'){world.yaw=0;world.pitch=0;pendingMouseX=0;pendingMouseY=0;toast('ВЗГЛЯД СБРОШЕН · СМОТРИ ВДОЛЬ КОРИДОРА',1800);}
   if(e.code==='KeyF'){
     if(world.battery<=0){toast('БАТАРЕЯ РАЗРЯЖЕНА · НАЙДИ ЭЛЕМЕНТ ПИТАНИЯ');return;}
     world.flashlight=!world.flashlight;updateFlashlight();beep(world.flashlight?580:260,.08,.018);
@@ -820,6 +818,14 @@ function flickerLights(){
 }
 function animate(){
   requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.045);
+  if(world.active&&document.pointerLockElement===renderer.domElement){
+    const stored=Number(localStorage.getItem('shift13-sensitivity')||'.00045'),sensitivity=THREE.MathUtils.clamp(Number.isFinite(stored)?stored:.00045,.00005,.0025);
+    const direction=localStorage.getItem('shift13-invert-x')==='1'?1:-1;
+    world.yaw+=direction*THREE.MathUtils.clamp(pendingMouseX*sensitivity,-dt*2,dt*2);
+    world.pitch-=THREE.MathUtils.clamp(pendingMouseY*sensitivity*.32,-dt*.45,dt*.45);
+    world.pitch=THREE.MathUtils.clamp(world.pitch,-1.22,1.22);
+  }
+  pendingMouseX=0;pendingMouseY=0;
   movement(dt);
   if(world.active){
     world.elapsedSeconds+=dt;world.saveTimer-=dt;
