@@ -68,6 +68,7 @@ kbd {border:1px solid rgba(201,194,168,.55);padding:2px 5px;color:#d58968;font:1
 .choice-option:hover {background:rgba(141,82,54,.3);border-color:#bd7858;transform:translateX(3px);}
 .choice-option b {display:block;color:#cc8a68;font-weight:500;letter-spacing:.1em;margin-bottom:3px;}
 .settings-panel {display:grid;gap:13px;margin:16px 0 20px;padding:13px 14px;border:1px solid rgba(175,143,105,.24);background:rgba(170,160,130,.04);}.settings-panel label{display:grid;grid-template-columns:1fr 150px;align-items:center;gap:14px;color:#8b948a;font-size:9px;letter-spacing:.1em;}.settings-panel input{width:100%;accent-color:#ad6549;}
+.settings-panel .setting-toggle{display:flex;justify-content:space-between;}.settings-panel .setting-toggle input{width:15px;height:15px;margin:0;}
 .journal-top button {background:none;border:1px solid rgba(175,143,105,.38);padding:7px 9px;color:#c6c2b3;font:9px 'IBM Plex Mono',monospace;letter-spacing:.1em;cursor:pointer;}
 .journal-top button b {color:#d18b69;font-weight:400;margin-left:7px;}
 .journal-list {display:grid;gap:10px;max-height:50vh;overflow:auto;padding-right:5px;}
