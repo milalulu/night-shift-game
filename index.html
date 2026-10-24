@@ -20,17 +20,18 @@
       <section id="hud" class="hidden" aria-live="polite">
         <div class="hud-top">
           <div class="station-tag"><span class="status-dot"></span> УЗЕЛ СВЯЗИ №13 <span class="tag-divider">/</span> 03:17</div>
-          <div class="objective"><span class="objective-label">ЗАДАЧА</span><span id="objective-text">Найти предохранители <b id="fuse-count">0 / 3</b></span></div>
+          <div class="objective"><span class="objective-label" id="chapter-name">ГЛАВА I · МЁРТВАЯ ЛИНИЯ</span><span id="objective-text">Найти предохранители <b id="fuse-count">0 / 3</b></span></div>
         </div>
         <div id="crosshair"><i></i><i></i></div>
         <div id="prompt" class="prompt hidden"><kbd>E</kbd><span id="prompt-text">Взаимодействовать</span></div>
         <div class="hud-bottom">
           <div class="radio-readout"><span class="radio-icon">▥</span><span id="radio-text">РАЦИЯ · ШУМ</span></div>
-          <div class="controls-hint">WASD <span>движение</span><b>·</b> E <span>действие</span><b>·</b> F <span>фонарь</span><b>·</b> SHIFT <span>бег</span></div>
+          <div class="controls-hint">WASD <span>движение</span><b>·</b> E <span>действие</span><b>·</b> F <span>фонарь</span><b>·</b> SHIFT <span>бег</span><b>·</b> CTRL <span>красться</span><b>·</b> J <span>журнал</span></div>
         </div>
         <div id="subtitle" class="subtitle hidden"></div>
         <div id="flashlight-indicator"><span class="beam-icon">◉</span> ФОНАРЬ <span id="light-state">ВКЛ</span></div>
         <div class="stamina-indicator"><span>ВЫНОСЛИВОСТЬ</span><i><b id="stamina-fill"></b></i></div>
+        <div class="battery-indicator"><span>БАТАРЕЯ</span><i><b id="battery-fill"></b></i><span id="battery-value">100%</span></div>
       </section>
 
       <section id="overlay" class="overlay">
@@ -38,15 +39,23 @@
           <div class="eyebrow"><span class="eyebrow-line"></span> ИНТЕРАКТИВНАЯ ИСТОРИЯ · 1998</div>
           <h1>СМЕНА<br /><em>13</em></h1>
           <div class="title-rule"><span></span><b>УЗЕЛ СВЯЗИ</b><span></span></div>
-          <p class="story">Последний автобус ушёл. В старом узле связи погас свет, а диспетчер перестал отвечать. До рассвета — несколько часов. Нужно запустить резервный генератор и выбраться.</p>
+          <p class="story">17 октября 1998-го. Инженер Илья Волков приезжает на узел №13 проверить линию, которая три ночи подряд передаёт голос его погибшей сестры. Приказ простой: забрать запись и отключить станцию. Но в журнале смены указано, что дежурные всё ещё на месте.</p>
           <button id="start-button" class="start-button"><span>НАЧАТЬ СМЕНУ</span><b>↗</b></button>
-          <div class="menu-footer"><span>WASD — ходить</span><span>МЫШЬ — смотреть</span><span>E — взаимодействовать</span></div>
-          <div class="build-stamp">ДЕЛО № 13—04 <span>·</span> СЕКТОР ВОСТОК</div>
+          <button id="new-game-button" class="new-game-button hidden" type="button">НАЧАТЬ ЗАНОВО · СТЕРЕТЬ ПРОГРЕСС</button>
+          <div class="menu-footer"><span>WASD — ходить</span><span>МЫШЬ — смотреть</span><span>E — взаимодействовать</span><span>CTRL — красться</span></div>
+          <div class="build-stamp">ЭПИЗОД I · ЛИНИЯ ЧЕТЫРЕ <span>·</span> 15–20 МИНУТ</div>
         </div>
         <div class="menu-coordinates">55°45' С.Ш. &nbsp; 37°37' В.Д.<br />МОСКОВСКАЯ ОБЛАСТЬ</div>
       </section>
       <div id="toast" class="toast hidden"></div>
       <div id="letter" class="letter hidden"></div>
+      <section id="choice-panel" class="choice-panel hidden"></section>
+      <section id="journal-panel" class="journal-panel hidden">
+        <div class="journal-top"><span>БЛОКНОТ ИНЖЕНЕРА · СМЕНА 13</span><button id="journal-close" type="button">ЗАКРЫТЬ <b>J</b></button></div>
+        <h2 id="journal-title">ЖУРНАЛ ДЕЛА</h2>
+        <div id="journal-content"></div>
+      </section>
+      <div id="hide-overlay" class="hide-overlay hidden"><div></div><div></div><div></div><p>УКРЫТИЕ · E — ВЫЙТИ</p></div>
     </main>
     <script type="module" src="game.js"></script>
   </body>
