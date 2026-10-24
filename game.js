@@ -42,9 +42,14 @@ const world = {
   crouched: false, hidden: false, phase: 'fuses', evidence: new Set(), fuseIds: new Set(), batteries: new Set(), tape: false,
   ep2Evidence: new Set(), ep2Dials: [0,0,0], ep2Power: false, ep2Ending: null, previousEnding: null,
   dials: [0, 0, 0], signalTuned: false, ending: null, lastNoise: 0, noiseAt: { x: 0, z: 0 }, footstepTimer: 0,
-  saveTimer: 0,
+  saveTimer: 0, elapsedSeconds: 0, clockTimer: 0,
 };
 const player = { x: 0, z: 15.6, y: 1.64, radius: .34 };
+function stationTime(){
+  const start=3*60+17,multiplier=world.episode===2?3.5:3,total=start+Math.floor((world.elapsedSeconds||0)*multiplier/60),hours=Math.floor(total/60)%24,minutes=total%60;
+  return `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}`;
+}
+function updateStationClock(){const clockElement=$('clock-display');if(clockElement)clockElement.textContent=stationTime();}
 
 function box(name, x, y, z, sx, sy, sz, material, options = {}) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
@@ -389,21 +394,27 @@ function footstep(crouched=false){
 function beep(freq=680,duration=.12,volume=.035){
   const ctx=window.audioContext;if(!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.setValueAtTime(freq,ctx.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.72,ctx.currentTime+duration);g.gain.setValueAtTime(volume,ctx.currentTime);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+duration);o.connect(g).connect(window.masterGain||ctx.destination);o.start();o.stop(ctx.currentTime+duration);
 }
-function subtitle(text,duration=3200){const el=$('subtitle');el.textContent=text;el.classList.remove('hidden');clearTimeout(subtitle.timer);subtitle.timer=setTimeout(()=>el.classList.add('hidden'),duration);}
+function subtitle(text,duration=3200){const el=$('subtitle');el.textContent=text;el.style.fontSize=`${localStorage.getItem('shift13-subtitle-size')||12}px`;el.classList.remove('hidden');clearTimeout(subtitle.timer);subtitle.timer=setTimeout(()=>el.classList.add('hidden'),duration);}
 function toast(text,duration=2300){const el=$('toast');el.textContent=text;el.classList.remove('hidden');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.add('hidden'),duration);}
 const journalEntries=[];
 let letterOpen=false,choiceOpen=false,journalOpen=false;
 let hasSavedGame=false;
+const saveKeyFor=(episode)=>`shift13-save-ep${episode}`;
 function saveCheckpoint(){
   if(world.ended)return;
-  const snapshot={episode:world.episode,phase:world.phase,fuses:world.fuses,fuseIds:[...world.fuseIds],batteries:[...world.batteries],generator:world.generator,monsterAwake:world.monsterAwake,tape:world.tape,dials:world.dials,signalTuned:world.signalTuned,ending:world.ending,evidence:[...world.evidence],ep2Evidence:[...world.ep2Evidence],ep2Dials:world.ep2Dials,ep2Power:world.ep2Power,ep2Ending:world.ep2Ending,previousEnding:world.previousEnding,journal:journalEntries,player:{x:player.x,z:player.z,yaw:world.yaw},battery:world.battery};
-  try{localStorage.setItem('shift13-save',JSON.stringify(snapshot));hasSavedGame=true;}catch{}
+  const snapshot={episode:world.episode,phase:world.phase,fuses:world.fuses,fuseIds:[...world.fuseIds],batteries:[...world.batteries],generator:world.generator,monsterAwake:world.monsterAwake,tape:world.tape,dials:world.dials,signalTuned:world.signalTuned,ending:world.ending,evidence:[...world.evidence],ep2Evidence:[...world.ep2Evidence],ep2Dials:world.ep2Dials,ep2Power:world.ep2Power,ep2Ending:world.ep2Ending,previousEnding:world.previousEnding,journal:journalEntries,player:{x:player.x,z:player.z,yaw:world.yaw},battery:world.battery,elapsedSeconds:world.elapsedSeconds||0};
+  try{localStorage.setItem(saveKeyFor(world.episode),JSON.stringify(snapshot));localStorage.setItem('shift13-active-episode',String(world.episode));hasSavedGame=true;world.saveTimer=15;updateChapterMenu();}catch{}
 }
 function restoreCheckpoint(){
-  let data;try{data=JSON.parse(localStorage.getItem('shift13-save')||'null');}catch{return false;}
+  let data;
+  try{
+    let activeEpisode=Number(localStorage.getItem('shift13-active-episode')||1);let saved=localStorage.getItem(saveKeyFor(activeEpisode));
+    if(!saved){const legacy=localStorage.getItem('shift13-save');if(legacy){data=JSON.parse(legacy);activeEpisode=data.episode||1;localStorage.setItem(saveKeyFor(activeEpisode),legacy);localStorage.setItem('shift13-active-episode',String(activeEpisode));localStorage.removeItem('shift13-save');}else return false;}
+    else data=JSON.parse(saved);
+  }catch{return false;}
   if(!data)return false;
   try{
-    world.episode=data.episode||1;world.phase=data.phase||'fuses';world.fuses=data.fuses||0;world.fuseIds=new Set(data.fuseIds||[]);world.batteries=new Set(data.batteries||[]);world.generator=!!data.generator;world.monsterAwake=!!data.monsterAwake;world.tape=!!data.tape;world.dials=Array.isArray(data.dials)?data.dials:[0,0,0];world.signalTuned=!!data.signalTuned;world.ending=data.ending||null;world.evidence=new Set(data.evidence||[]);world.ep2Evidence=new Set(data.ep2Evidence||[]);world.ep2Dials=Array.isArray(data.ep2Dials)?data.ep2Dials:[0,0,0];world.ep2Power=!!data.ep2Power;world.ep2Ending=data.ep2Ending||null;world.previousEnding=data.previousEnding||null;world.battery=Number.isFinite(data.battery)?data.battery:1;
+    world.episode=data.episode||1;world.phase=data.phase||'fuses';world.fuses=data.fuses||0;world.fuseIds=new Set(data.fuseIds||[]);world.batteries=new Set(data.batteries||[]);world.generator=!!data.generator;world.monsterAwake=!!data.monsterAwake;world.tape=!!data.tape;world.dials=Array.isArray(data.dials)?data.dials:[0,0,0];world.signalTuned=!!data.signalTuned;world.ending=data.ending||null;world.evidence=new Set(data.evidence||[]);world.ep2Evidence=new Set(data.ep2Evidence||[]);world.ep2Dials=Array.isArray(data.ep2Dials)?data.ep2Dials:[0,0,0];world.ep2Power=!!data.ep2Power;world.ep2Ending=data.ep2Ending||null;world.previousEnding=data.previousEnding||null;world.battery=Number.isFinite(data.battery)?data.battery:1;world.elapsedSeconds=data.elapsedSeconds||0;
     if(data.player){player.x=data.player.x;player.z=data.player.z;world.yaw=data.player.yaw||0;}
     if(Array.isArray(data.journal))journalEntries.push(...data.journal);
     for(const item of interactables){
@@ -432,10 +443,21 @@ function restoreCheckpoint(){
     if(world.ep2Ending){e2ExitDoor.visible=false;const doorCollider=colliders.findIndex(c=>Math.abs(c.x-100)<.01&&Math.abs(c.z-20)<.01&&c.hx<2);if(doorCollider>=0)colliders.splice(doorCollider,1);}
     for(let i=0;i<3;i++)e2DialMeshes[i].rotation.z=world.ep2Dials[i]*Math.PI/5;
     if(world.monsterAwake){monster.visible=true;monster.position.set(world.episode===2?100:0,0,world.episode===2?-17:world.tape?-35:-16.7);}
-    updateJournal();refreshObjective();updateFlashlight();$('start-button').querySelector('span').textContent='ПРОДОЛЖИТЬ СМЕНУ';$('new-game-button').classList.remove('hidden');
-    if(world.episode===2)$('episode2-menu-button').classList.add('hidden');
+    updateJournal();refreshObjective();updateFlashlight();$('start-button').querySelector('span').textContent=`ПРОДОЛЖИТЬ · ЭПИЗОД ${world.episode}`;$('new-game-button').classList.remove('hidden');
     return true;
   }catch{return false;}
+}
+function updateChapterMenu(){
+  const unlocked=localStorage.getItem('shift13-ep2-unlocked')==='1';
+  $('start-button').querySelector('span').textContent=hasSavedGame?`ПРОДОЛЖИТЬ · ЭПИЗОД ${world.episode}`:unlocked?'НАЧАТЬ ЭПИЗОД I':'НАЧАТЬ СМЕНУ';
+  $('episode1-menu-button').classList.toggle('hidden',!unlocked);$('episode2-menu-button').classList.toggle('hidden',!unlocked);
+  if(unlocked)$('episode2-menu-button').textContent=localStorage.getItem(saveKeyFor(2))?'ПРОДОЛЖИТЬ · ЭПИЗОД II «БЕЛЫЙ ШУМ»':'НАЧАТЬ · ЭПИЗОД II «БЕЛЫЙ ШУМ»';
+  $('new-game-button').classList.toggle('hidden',!localStorage.getItem(saveKeyFor(1))&&!localStorage.getItem(saveKeyFor(2)));
+  if(hasSavedGame&&world.episode===2){
+    document.querySelector('.title-rule b').textContent='БЕЛЫЙ ШУМ';
+    document.querySelector('.story').textContent='24 октября 1998-го. В районном радиоцентре Оксана слышит собственный голос в эфире. Илья возвращается за тремя катушками и находит сигнал, который помнит его прошлое решение.';
+    document.querySelector('.build-stamp').innerHTML='ЭПИЗОД II · РАЙОННЫЙ РАДИОЦЕНТР <span>·</span> 8–12 МИНУТ';
+  }
 }
 function setObjective(chapter,title,progress){
   $('chapter-name').textContent=chapter;
@@ -472,9 +494,9 @@ function lockPointer(){
   try{const request=renderer.domElement.requestPointerLock?.();if(request&&typeof request.catch==='function')request.catch(()=>toast('ЩЁЛКНИ ПО ИГРЕ, ЧТОБЫ ЗАХВАТИТЬ МЫШЬ',2600));}catch{toast('ЩЁЛКНИ ПО ИГРЕ, ЧТОБЫ ЗАХВАТИТЬ МЫШЬ',2600);}
 }
 function begin(){
-  if(world.episode===2){document.querySelector('.station-tag').innerHTML='<span class="status-dot"></span> РАЙОННЫЙ РАДИОЦЕНТР <span class="tag-divider">/</span> 03:17';$('radio-text').textContent='РАЙОННАЯ СЕТЬ · ОКСАНА';}
+  if(world.episode===2){document.querySelector('.station-tag').innerHTML='<span class="status-dot"></span> РАЙОННЫЙ РАДИОЦЕНТР <span class="tag-divider">/</span> <span id="clock-display">03:17</span>';$('radio-text').textContent='РАЙОННАЯ СЕТЬ · ОКСАНА';}
   $('overlay').classList.add('hidden');$('hud').classList.remove('hidden');world.active=true;world.paused=false;audioStart();lockPointer();
-  refreshObjective();
+  refreshObjective();updateStationClock();
   if(hasSavedGame)subtitle('СМЕНА ПРОДОЛЖЕНА · ТВОИ ЗАПИСИ И ПРЕДМЕТЫ СОХРАНЕНЫ.',3300);
   else{subtitle('СЛУЖЕБНЫЙ ЖУРНАЛ · 17 ОКТЯБРЯ 1998 · 03:17\n«Илья, если слышишь меня — не включай четвёртую линию».',5400);setTimeout(()=>{if(world.active)radioLine('sokolov-opening','Соколов по рации: «Сначала подай питание. Архив за шлюзом. Я встречу тебя у выхода».',5800);},6100);}
   saveCheckpoint();
@@ -484,11 +506,12 @@ function begin(){
 function pause(){
   if(!world.active||world.ended||journalOpen||choiceOpen)return;
   world.paused=true;world.active=false;
-  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> СМЕНА ПРИОСТАНОВЛЕНА</div><h1 style="font-size:clamp(64px,10vw,110px)">ТИШЕ.</h1><p class="story">Станция никуда не денется. Надеюсь.</p><div class="settings-panel"><label>ЧУВСТВИТЕЛЬНОСТЬ МЫШИ <input id="sensitivity-setting" type="range" min="0.0007" max="0.004" step="0.0001" value="0.0021"></label><label>ГРОМКОСТЬ <input id="volume-setting" type="range" min="0" max="1" step="0.05" value="0.65"></label></div><button id="resume-button" class="start-button"><span>ВЕРНУТЬСЯ</span><b>↗</b></button><div class="menu-footer"><span>ESC — продолжить</span><span>J — журнал</span></div></div>`;
+  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> СМЕНА ПРИОСТАНОВЛЕНА</div><h1 style="font-size:clamp(64px,10vw,110px)">ТИШЕ.</h1><p class="story">Станция никуда не денется. Надеюсь.</p><div class="settings-panel"><label>ЧУВСТВИТЕЛЬНОСТЬ МЫШИ <input id="sensitivity-setting" type="range" min="0.0007" max="0.004" step="0.0001" value="0.0021"></label><label>ГРОМКОСТЬ <input id="volume-setting" type="range" min="0" max="1" step="0.05" value="0.65"></label><label>РАЗМЕР СУБТИТРОВ <input id="subtitle-setting" type="range" min="10" max="20" step="1" value="12"></label></div><button id="resume-button" class="start-button"><span>ВЕРНУТЬСЯ</span><b>↗</b></button><div class="menu-footer"><span>ESC — продолжить</span><span>J — журнал</span></div></div>`;
   $('overlay').classList.remove('hidden');document.exitPointerLock?.();
-  const sensitivity=$('sensitivity-setting'),volume=$('volume-setting');sensitivity.value=localStorage.getItem('shift13-sensitivity')||'0.0021';volume.value=localStorage.getItem('shift13-volume')||'.65';
+  const sensitivity=$('sensitivity-setting'),volume=$('volume-setting'),subtitleSize=$('subtitle-setting');sensitivity.value=localStorage.getItem('shift13-sensitivity')||'0.0021';volume.value=localStorage.getItem('shift13-volume')||'.65';subtitleSize.value=localStorage.getItem('shift13-subtitle-size')||'12';
   sensitivity.addEventListener('input',()=>localStorage.setItem('shift13-sensitivity',sensitivity.value));
   volume.addEventListener('input',()=>{localStorage.setItem('shift13-volume',volume.value);if(window.masterGain)window.masterGain.gain.value=Number(volume.value);});
+  subtitleSize.addEventListener('input',()=>{localStorage.setItem('shift13-subtitle-size',subtitleSize.value);$('subtitle').style.fontSize=`${subtitleSize.value}px`;});
   $('resume-button').onclick=resume;
 }
 function resume(){world.paused=false;world.active=true;$('overlay').classList.add('hidden');audioStart();lockPointer();}
@@ -501,9 +524,9 @@ function endGame(result){
     truth:{title:'ПАМЯТЬ',text:'Ты передал журнал, акт и резервную запись в эфир, а затем закоротил линию четвёртого канала. Голос Лены успел сказать: «Теперь можешь идти». На этот раз ты поверил.'},
   };
   const ending=endings[result]||{title:'СИГНАЛ ПОТЕРЯН',text:'Тебе не удалось выбраться до рассвета. В журнале смены утром нашли только одну фразу: «Не отвечай, если услышишь своё имя».'};
-  try{if(result){const endingsSeen=JSON.parse(localStorage.getItem('shift13-endings')||'[]');endingsSeen.push(result);localStorage.setItem('shift13-endings',JSON.stringify(endingsSeen));localStorage.setItem('shift13-last-ending',result);localStorage.setItem('shift13-ep2-unlocked','1');localStorage.removeItem('shift13-save');}}catch{}
-  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> ЗАПИСЬ СМЕНЫ · 04:02</div><h1 style="font-size:clamp(64px,10vw,110px)">${ending.title}</h1><p class="story">${ending.text}</p><p class="story">Доказательств собрано: ${world.evidence.size}. ${world.evidence.size<3?'В журнале остались незаполненные страницы.':''}</p><button id="restart-button" class="start-button"><span>${result?'ПЕРЕИГРАТЬ ЭПИЗОД I':'ВЕРНУТЬСЯ К КОНТРОЛЬНОЙ ТОЧКЕ'}</span><b>↗</b></button>${result?'<button id="episode2-button" class="new-game-button">ПЕРЕЙТИ К ЭПИЗОДУ II · БЕЛЫЙ ШУМ</button>':''}<div class="build-stamp">СМЕНА 13 <span>·</span> КОНЕЦ ЗАПИСИ</div></div>`;
-  $('overlay').classList.remove('hidden');$('restart-button').onclick=()=>location.reload();$('episode2-button')?.addEventListener('click',startEpisode2);
+  try{if(result){const endingsSeen=JSON.parse(localStorage.getItem('shift13-endings')||'[]');endingsSeen.push(result);localStorage.setItem('shift13-endings',JSON.stringify(endingsSeen));localStorage.setItem('shift13-last-ending',result);localStorage.setItem('shift13-ep2-unlocked','1');localStorage.removeItem(saveKeyFor(1));localStorage.setItem('shift13-active-episode','1');localStorage.removeItem('shift13-save');}}catch{}
+  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> ЗАПИСЬ СМЕНЫ · ${stationTime()}</div><h1 style="font-size:clamp(64px,10vw,110px)">${ending.title}</h1><p class="story">${ending.text}</p><p class="story">Доказательств собрано: ${world.evidence.size}. ${world.evidence.size<3?'В журнале остались незаполненные страницы.':''}</p><button id="restart-button" class="start-button"><span>${result?'ПЕРЕИГРАТЬ ЭПИЗОД I':'ВЕРНУТЬСЯ К КОНТРОЛЬНОЙ ТОЧКЕ'}</span><b>↗</b></button>${result?'<button id="episode2-button" class="new-game-button">ПЕРЕЙТИ К ЭПИЗОДУ II · БЕЛЫЙ ШУМ</button>':''}<div class="build-stamp">СМЕНА 13 <span>·</span> КОНЕЦ ЗАПИСИ</div></div>`;
+  $('overlay').classList.remove('hidden');$('restart-button').onclick=()=>location.reload();$('episode2-button')?.addEventListener('click',selectEpisode2);
 }
 function finishEpisode2(result){
   world.ended=true;world.active=false;document.exitPointerLock?.();$('hud').classList.add('hidden');
@@ -513,8 +536,8 @@ function finishEpisode2(result){
     'e2-isolate':{title:'ЗАПЕРТЫЙ КОНТУР',text:'Ты отправил копию записей в архив и замкнул сигнал на пустой несущей. Город проснулся в тишине. На ленте остался один новый голос: «Илья, северный узел всё ещё работает».'},
   };
   const ending=endings[result]||{title:'СВЯЗЬ ПОТЕРЯНА',text:'Ты не успел выбраться из радиоцентра. Утром передатчик продолжал работать, хотя питание на щите было отключено.'};
-  try{if(result){localStorage.setItem('shift13-ep2-ending',result);localStorage.removeItem('shift13-save');}}catch{}
-  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> РАЙОННЫЙ РАДИОЦЕНТР · 04:48</div><h1 style="font-size:clamp(64px,10vw,110px)">${ending.title}</h1><p class="story">${ending.text}</p><p class="story">Эпизод II завершён. Улик: ${world.ep2Evidence.size}.</p><button id="restart-button" class="start-button"><span>${result?'ВЕРНУТЬСЯ В МЕНЮ':'ЗАГРУЗИТЬ КОНТРОЛЬНУЮ ТОЧКУ'}</span><b>↗</b></button><div class="build-stamp">СЛЕДУЮЩИЙ ЭПИЗОД · «ГОЛОС»</div></div>`;
+  try{if(result){localStorage.setItem('shift13-ep2-ending',result);localStorage.removeItem(saveKeyFor(2));localStorage.setItem('shift13-active-episode','1');localStorage.removeItem('shift13-save');}}catch{}
+  $('overlay').innerHTML=`<div class="menu-card"><div class="eyebrow"><span class="eyebrow-line"></span> РАЙОННЫЙ РАДИОЦЕНТР · ${stationTime()}</div><h1 style="font-size:clamp(64px,10vw,110px)">${ending.title}</h1><p class="story">${ending.text}</p><p class="story">Эпизод II завершён. Улик: ${world.ep2Evidence.size}.</p><button id="restart-button" class="start-button"><span>${result?'ВЕРНУТЬСЯ В МЕНЮ':'ЗАГРУЗИТЬ КОНТРОЛЬНУЮ ТОЧКУ'}</span><b>↗</b></button><div class="build-stamp">СЛЕДУЮЩИЙ ЭПИЗОД · «ГОЛОС»</div></div>`;
   $('overlay').classList.remove('hidden');$('restart-button').onclick=()=>location.reload();
 }
 function openJournal(){
@@ -546,9 +569,9 @@ function activateEpisode2(){for(const item of interactables)if(item.type.startsW
 function startEpisode2(){
   if(localStorage.getItem('shift13-ep2-unlocked')!=='1'&&world.episode!==2)return;
   world.episode=2;world.phase='e2-records';world.ending=null;world.ep2Ending=null;world.ep2Power=false;world.ep2Dials=[0,0,0];world.ep2Evidence=new Set();world.previousEnding=localStorage.getItem('shift13-last-ending')||'erase';
-  world.fuses=0;world.generator=false;world.tape=false;world.signalTuned=false;world.battery=1;world.stamina=1;world.hidden=false;world.monsterAwake=false;world.monsterCaught=false;world.lastNoise=0;world.walked=0;world.episode=2;world.ended=false;world.paused=false;world.active=true;world.crouched=false;world.moving=false;
+  world.fuses=0;world.generator=false;world.tape=false;world.signalTuned=false;world.battery=1;world.stamina=1;world.hidden=false;world.monsterAwake=false;world.monsterCaught=false;world.lastNoise=0;world.walked=0;world.saveTimer=0;world.elapsedSeconds=0;world.episode=2;world.ended=false;world.paused=false;world.active=true;world.crouched=false;world.moving=false;
   player.x=100;player.z=15.7;world.yaw=0;world.pitch=0;monster.visible=false;e2ServiceGate.visible=true;e2ExitDoor.visible=true;e2GeneratorLamp.material.color.setHex(0x872f22);e2GeneratorLamp.material.emissive.setHex(0x30100a);e2SignalLight.material.color.setHex(0x903b2a);e2SignalLight.material.emissive.setHex(0x250b07);e2GeneratorBody.position.y=1.35;activateEpisode2();
-  hasSavedGame=false;document.querySelector('.station-tag').innerHTML='<span class="status-dot"></span> РАЙОННЫЙ РАДИОЦЕНТР <span class="tag-divider">/</span> 03:17';$('overlay').classList.add('hidden');$('hud').classList.remove('hidden');$('episode2-menu-button').classList.add('hidden');$('radio-text').textContent='РАЙОННАЯ СЕТЬ · ОКСАНА';audioStart();lockPointer();refreshObjective();saveCheckpoint();
+  hasSavedGame=false;world.elapsedSeconds=0;document.querySelector('.station-tag').innerHTML='<span class="status-dot"></span> РАЙОННЫЙ РАДИОЦЕНТР <span class="tag-divider">/</span> <span id="clock-display">03:17</span>';$('overlay').classList.add('hidden');$('hud').classList.remove('hidden');$('episode2-menu-button').classList.add('hidden');$('radio-text').textContent='РАЙОННАЯ СЕТЬ · ОКСАНА';audioStart();lockPointer();refreshObjective();updateStationClock();saveCheckpoint();
   const consequence=world.previousEnding==='broadcast'?'После твоего эфира сигнал появился на семнадцати частотах.':world.previousEnding==='truth'?'Сохранённые улики привели тебя к районному передатчику.':'После отключения узла в журнале пропал целый час.';
   radioLine('oksana-opening',`24 ОКТЯБРЯ 1998 · 03:17 · ${consequence} Оксана: «Я слышу себя в эфире, но я молчу».`,7800);
 }
@@ -564,11 +587,19 @@ function chooseEpisode2(ending){
   world.ep2Ending=ending;world.phase='e2-escape';choiceOpen=false;$('choice-panel').classList.add('hidden');refreshObjective();openDoor(e2ExitDoor);world.monsterAwake=true;world.monsterState='hunt';world.active=true;lockPointer();
   toast('ВЫХОД ОТКРЫТ · ВЕРНИСЬ К ЮЖНОМУ ВХОДУ',3500);radioLine(ending==='e2-broadcast'?'sokolov-broadcast':ending==='e2-isolate'?'lena-truth':'oksana-cut',ending==='e2-broadcast'?'Соколов: «Эфир пошёл. Илья, выходи — сигнал услышал весь район».':ending==='e2-isolate'?'Лена: «Контур закрыт. Теперь можешь идти».':'Оксана: «Связь пропала. Илья, ты ещё слышишь меня?»',5200);saveCheckpoint();
 }
+function replayEpisode1(){localStorage.removeItem(saveKeyFor(1));localStorage.setItem('shift13-active-episode','1');location.reload();}
+function selectEpisode2(){
+  if(localStorage.getItem(saveKeyFor(2))){localStorage.setItem('shift13-active-episode','2');location.reload();return;}
+  startEpisode2();
+}
+function resetAllSaves(){for(const key of [saveKeyFor(1),saveKeyFor(2),'shift13-save','shift13-active-episode','shift13-ep2-unlocked','shift13-last-ending','shift13-endings','shift13-ep2-ending'])localStorage.removeItem(key);location.reload();}
 hasSavedGame=restoreCheckpoint();
+updateChapterMenu();
 $('start-button').addEventListener('click',begin);
-$('new-game-button').addEventListener('click',()=>{localStorage.removeItem('shift13-save');location.reload();});
-$('episode2-menu-button').addEventListener('click',startEpisode2);
-if(localStorage.getItem('shift13-ep2-unlocked')==='1')$('episode2-menu-button').classList.remove('hidden');
+$('start-button').disabled=false;
+$('new-game-button').addEventListener('click',resetAllSaves);
+$('episode1-menu-button').addEventListener('click',replayEpisode1);
+$('episode2-menu-button').addEventListener('click',selectEpisode2);
 $('journal-close').addEventListener('click',closeJournal);
 document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==renderer.domElement&&world.active&&!world.ended)pause();});
 document.addEventListener('mousemove',(e)=>{if(!world.active||document.pointerLockElement!==renderer.domElement)return;const sensitivity=Number(localStorage.getItem('shift13-sensitivity')||'0.0021');world.yaw-=e.movementX*sensitivity;world.pitch-=e.movementY*sensitivity*.86;world.pitch=THREE.MathUtils.clamp(world.pitch,-1.3,1.3);});
@@ -765,6 +796,14 @@ function flickerLights(){
 function animate(){
   requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.045);
   movement(dt);
+  if(world.active){
+    world.elapsedSeconds+=dt;world.saveTimer-=dt;
+    if(world.saveTimer<=0){
+      const threatDistance=world.monsterAwake?distance(monster.position.x,monster.position.z):Infinity;
+      if(world.hidden||threatDistance>10){saveCheckpoint();world.saveTimer=15;}else world.saveTimer=2;
+    }
+  }
+  world.clockTimer-=dt;if(world.clockTimer<=0){updateStationClock();world.clockTimer=1;}
   if(world.active&&world.flashlight&&world.battery>0){world.battery=Math.max(0,world.battery-dt*.00165);if(world.battery===0){toast('ФОНАРЬ ПОГАС · БАТАРЕЯ РАЗРЯЖЕНА',3500);world.flashlight=false;}updateFlashlight();}
   updateTweens();
   if(world.generator){generatorRotor.rotation.z+=dt*8;generatorBody.position.y=1.35+Math.sin(clock.elapsedTime*14)*.012;}
