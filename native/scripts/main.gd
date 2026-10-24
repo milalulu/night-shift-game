@@ -1,7 +1,10 @@
 extends Node3D
 
 const PlayerController = preload("res://scripts/player_controller.gd")
-const SAVE_PATH := "user://shift13_native.cfg"
+const SAVE_PATH_E1 := "user://shift13_episode1.cfg"
+const SAVE_PATH_E2 := "user://shift13_episode2.cfg"
+const SAVE_PATH_LEGACY := "user://shift13_native.cfg"
+const PROFILE_PATH := "user://shift13_profile.cfg"
 
 var player
 var world_environment: WorldEnvironment
@@ -77,9 +80,15 @@ var message_timer := 0.0
 var clock_timer := 0.0
 var game_started := false
 var has_checkpoint := false
+var has_checkpoint_e1 := false
+var has_checkpoint_e2 := false
 var game_paused := false
-var reading_document := false
+
+func _active_save_path() -> String:
+	return SAVE_PATH_E2 if current_episode == 2 else SAVE_PATH_E1
+
 var choice_active := false
+var reading_document := false
 var hiding := false
 var last_noise_position := Vector3.ZERO
 var noise_level := 0.0
@@ -126,6 +135,28 @@ func _build_materials() -> void:
 		"paper": _material(Color("#c5bda5")),
 		"black": _material(Color("#070908")),
 	}
+	var wall_grain := _grain_texture(13)
+	var floor_grain := _grain_texture(104)
+	var wood_grain := _grain_texture(31)
+	for key in ["wall","wall_dark","concrete"]:
+		(mats[key] as StandardMaterial3D).albedo_texture = wall_grain
+		(mats[key] as StandardMaterial3D).uv1_scale = Vector3(3.0,3.0,3.0)
+	(mats.floor as StandardMaterial3D).albedo_texture = floor_grain
+	(mats.floor as StandardMaterial3D).uv1_scale = Vector3(4.0,4.0,4.0)
+	(mats.wood as StandardMaterial3D).albedo_texture = wood_grain
+	(mats.wood as StandardMaterial3D).uv1_scale = Vector3(2.0,2.0,2.0)
+
+func _grain_texture(seed: int) -> Texture2D:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var image := Image.create(96,96,false,Image.FORMAT_RGBA8)
+	for y in range(96):
+		for x in range(96):
+			var value := rng.randf_range(.64,1.0)
+			if rng.randf()<.018:
+				value *= .52
+			image.set_pixel(x,y,Color(value,value,value,1.0))
+	return ImageTexture.create_from_image(image)
 
 func _material(color: Color, emission: Color = Color.BLACK, metallic: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -224,6 +255,79 @@ func _sign(text: String, x: float, y: float, z: float, font_size: int = 24) -> v
 	label.pixel_size = .004
 	add_child(label)
 
+func _add_clock(position: Vector3) -> void:
+	var housing := MeshInstance3D.new()
+	var face_mesh := CylinderMesh.new()
+	face_mesh.top_radius = .44
+	face_mesh.bottom_radius = .44
+	face_mesh.height = .12
+	housing.mesh = face_mesh
+	housing.rotation.x = PI/2.0
+	housing.position = position
+	housing.material_override = mats.dark_metal
+	add_child(housing)
+	var face := MeshInstance3D.new()
+	var face_disc := CylinderMesh.new()
+	face_disc.top_radius = .36
+	face_disc.bottom_radius = .36
+	face_disc.height = .025
+	face.mesh = face_disc
+	face.rotation.x = PI/2.0
+	face.position = position + Vector3(0,0,.075)
+	face.material_override = mats.paper
+	add_child(face)
+	var dial := Label3D.new()
+	dial.text = "03:17"
+	dial.position = position + Vector3(0,-.08,.095)
+	dial.font_size = 24
+	dial.pixel_size = .0035
+	dial.modulate = Color("#743e2f")
+	add_child(dial)
+
+func _add_puddle(position: Vector3) -> void:
+	var puddle := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = .58
+	sphere.height = .035
+	puddle.mesh = sphere
+	puddle.position = position
+	puddle.scale = Vector3(1.8,.38,.72)
+	var water := StandardMaterial3D.new()
+	water.albedo_color = Color(.12,.18,.18,.43)
+	water.metallic = .3
+	water.roughness = .16
+	water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	puddle.material_override = water
+	puddle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(puddle)
+
+func _add_dust(center: Vector3, extents: Vector3, amount: int) -> void:
+	var particles := GPUParticles3D.new()
+	particles.position = center
+	particles.amount = amount
+	particles.lifetime = 7.0
+	particles.preprocess = 3.0
+	var process := ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = extents
+	process.direction = Vector3(0,1,0)
+	process.spread = 180.0
+	process.initial_velocity_min = .015
+	process.initial_velocity_max = .09
+	process.gravity = Vector3(0,.01,0)
+	process.scale_min = .012
+	process.scale_max = .035
+	particles.process_material = process
+	var dust := QuadMesh.new()
+	dust.size = Vector2(.035,.035)
+	var dust_material := StandardMaterial3D.new()
+	dust_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dust_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dust_material.albedo_color = Color(.72,.72,.65,.22)
+	dust.material = dust_material
+	particles.draw_pass_1 = dust
+	add_child(particles)
+
 func _build_station() -> void:
 	# Main relay hall and four rooms.
 	_floor(0,0,8,40)
@@ -233,6 +337,9 @@ func _build_station() -> void:
 	for z in range(-18, 19, 4):
 		_solid_box("Ceiling beam", Vector3(0,3.22,z), Vector3(8.7,.18,.22), mats.dark_metal, false)
 		_solid_box("Floor seam", Vector3(0,.012,z), Vector3(7.7,.018,.035), mats.concrete, false)
+		for side in [-1.0,1.0]:
+			_solid_box("Painted wall panel",Vector3(side*3.76,1.38,z),Vector3(.045,1.12,2.5),mats.concrete,false)
+			_solid_box("Rust wall brace",Vector3(side*3.71,.32,z),Vector3(.12,.18,2.65),mats.rust,false)
 	for x in [-4.0,4.0]:
 		_wall_x(x,-20,-10.1)
 		_wall_x(x,-5.9,5.9)
@@ -288,6 +395,10 @@ func _build_station() -> void:
 	_sign("КАБЕЛЬНЫЙ ТОННЕЛЬ",0,2.45,-34.5,18)
 	_sign("АРХИВ ЛЕНТ",-13,2.45,-43.7,17)
 	_sign("КОММУТАТОР",0,2.35,-44,18)
+	_add_clock(Vector3(0,2.45,-6.35))
+	for puddle in [Vector3(-2.2,.012,-4.4),Vector3(1.9,.012,5.2),Vector3(-1.3,.012,-35.8),Vector3(2.1,.012,-46.0)]:
+		_add_puddle(puddle)
+	_add_dust(Vector3(0,1.8,-36),Vector3(3.1,2.1,9),44)
 	# Tables and shelving provide readable silhouettes and cover.
 	_table(-10,-8,2.3,1.15)
 	_shelf(13,-8)
@@ -338,6 +449,7 @@ func _build_radio_center() -> void:
 	_floor(100,0,8,40)
 	_floor(90,0,12,40)
 	_floor(110,0,12,40)
+	_floor(100,25,40,10)
 	_floor(100,-26,16,12)
 	_floor(100,-40,16,16)
 	for x in [96.0,104.0]:
@@ -377,6 +489,16 @@ func _build_radio_center() -> void:
 	_sign("ЭФИРНАЯ",90,2.45,12.75,16)
 	_sign("ЩИТОВАЯ",100,2.45,-29.5,16)
 	_sign("ПЕРЕДАТЧИК",100,2.45,-44,18)
+	# Rooftop antenna and old acoustic treatment make the second location distinct.
+	_floor(100,29,40,18)
+	_wall_x(80,20,38,mats.wall_dark)
+	_wall_x(120,20,38,mats.wall_dark)
+	_wall_z(38,80,120,mats.wall_dark)
+	_solid_box("Broadcast mast",Vector3(100,5.2,27),Vector3(.22,10.4,.22),mats.metal,false)
+	for y in [2.8,5.2,7.6]:
+		_solid_box("Mast crossbar",Vector3(100,y,27),Vector3(3.3,.12,.12),mats.rust,false)
+	_solid_box("Antenna shadow",Vector3(100,3.22,-8),Vector3(8.6,.1,.22),mats.dark_metal,false)
+	_add_dust(Vector3(100,1.8,-8),Vector3(3.1,2.1,9),36)
 	_table(90,-8,2.2,1.15)
 	_table(110,-8,2.2,1.1)
 	_table(90,8,2.2,1.05)
@@ -1588,12 +1710,21 @@ func _save_game() -> void:
 	config.set_value("episode2","power",episode2_power)
 	config.set_value("episode2","gate_open",episode2_gate_open)
 	config.set_value("episode2","ending",episode2_ending)
-	config.save(SAVE_PATH)
+	config.save(SAVE_PATH_E1 if current_episode == 1 else SAVE_PATH_E2)
 	has_checkpoint = true
 
 func _load_checkpoint() -> void:
 	var config := ConfigFile.new()
-	if config.load(SAVE_PATH) != OK:
+	if FileAccess.file_exists(SAVE_PATH_LEGACY):
+		var legacy := ConfigFile.new()
+		if legacy.load(SAVE_PATH_LEGACY) == OK:
+			var episode := int(legacy.get_value("run","current_episode",1))
+			legacy.save(SAVE_PATH_E1 if episode == 1 else SAVE_PATH_E2)
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH_LEGACY))
+	var preferred := SAVE_PATH_E1
+	if current_episode == 2 or config.load(SAVE_PATH_E1) != OK:
+		preferred = SAVE_PATH_E2
+	if config.load(preferred) != OK:
 		has_checkpoint = false
 		return
 	has_checkpoint = true
